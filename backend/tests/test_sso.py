@@ -110,7 +110,7 @@ class TestOIDCEndpoints:
     def test_oidc_callback_full_provisioning(self, api, db, monkeypatch):
         # فعال‌سازی ساختگی OIDC
         monkeypatch.setattr(oidc, "oidc_configured", lambda: True)
-        monkeypatch.setattr(oidc, "exchange_code", lambda code: {
+        monkeypatch.setattr(oidc, "exchange_code", lambda code, code_verifier=None: {
             "sub": "u-77", "preferred_username": "sso.newbie", "name": "کاربر سازمانی جدید",
             "email": "sso.newbie@corp.ir"})
         state = oidc.make_state("n1")
@@ -130,6 +130,108 @@ class TestOIDCEndpoints:
                     follow_redirects=False)
         assert r.status_code == 302
         assert "oidc_error=state" in r.headers["location"]
+
+
+class TestPKCE:
+    """فاز ۶ — PKCE (RFC 7636) روی جریان Authorization Code."""
+
+    def test_pkce_pair_rfc7636(self):
+        verifier, challenge = oidc.generate_pkce_pair()
+        # محدوده طول verifier طبق RFC 7636: ۴۳ تا ۱۲۸ نویسه base64url
+        assert 43 <= len(verifier) <= 128
+        allowed = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_")
+        assert set(verifier) <= allowed
+        import base64, hashlib
+        expected = base64.urlsafe_b64encode(
+            hashlib.sha256(verifier.encode("ascii")).digest()).decode().rstrip("=")
+        assert challenge == expected
+        assert "=" not in challenge
+
+    def test_pkce_pairs_are_unique(self):
+        a, b = oidc.generate_pkce_pair(), oidc.generate_pkce_pair()
+        assert a[0] != b[0] and a[1] != b[1]
+
+    def test_state_carries_verifier(self):
+        state = oidc.make_state("n9", "v" * 64)
+        data = oidc.parse_state_data(state)
+        assert data["nonce"] == "n9" and data["verifier"] == "v" * 64
+        # سازگاری رو به عقب — parse_state همچنان nonce می‌دهد
+        assert oidc.parse_state(state) == "n9"
+
+    def test_authorize_url_includes_pkce(self, monkeypatch):
+        monkeypatch.setattr(oidc, "discover", lambda: {
+            "authorization_endpoint": "https://idp/authorize"})
+        monkeypatch.setattr(oidc.settings, "OIDC_PKCE_ENABLED", True)
+        url = oidc.build_authorize_url()
+        assert "code_challenge=" in url and "code_challenge_method=S256" in url
+        state = url.split("state=")[1].split("&")[0]
+        from urllib.parse import unquote
+        data = oidc.parse_state_data(unquote(state))
+        assert data and len(data.get("verifier", "")) >= 43
+
+    def test_authorize_url_without_pkce(self, monkeypatch):
+        monkeypatch.setattr(oidc, "discover", lambda: {
+            "authorization_endpoint": "https://idp/authorize"})
+        monkeypatch.setattr(oidc.settings, "OIDC_PKCE_ENABLED", False)
+        url = oidc.build_authorize_url()
+        assert "code_challenge" not in url
+
+    def test_exchange_code_sends_verifier_and_optional_secret(self, monkeypatch):
+        conf = {"token_endpoint": "https://idp/token", "userinfo_endpoint": "https://idp/userinfo"}
+        monkeypatch.setattr(oidc, "discover", lambda: conf)
+        captured = {}
+
+        def fake_post(url, data=None, timeout=None):
+            captured.update(data or {})
+
+            class R:
+                def raise_for_status(self):
+                    pass
+
+                def json(self):
+                    return {"access_token": "AT"}
+
+            return R()
+
+        def fake_get(url, headers=None, timeout=None):
+            class R:
+                def raise_for_status(self):
+                    pass
+
+                def json(self):
+                    return {"sub": "u1", "preferred_username": "pk.user"}
+
+            return R()
+
+        monkeypatch.setattr(oidc.httpx, "post", fake_post)
+        monkeypatch.setattr(oidc.httpx, "get", fake_get)
+        monkeypatch.setattr(oidc.settings, "OIDC_CLIENT_SECRET", "")  # کلاینت عمومی
+        oidc.exchange_code("code-1", code_verifier="ver-123")
+        assert captured["code_verifier"] == "ver-123"
+        assert "client_secret" not in captured
+        assert captured["grant_type"] == "authorization_code"
+        # secret پر شود → ارسال می‌شود
+        monkeypatch.setattr(oidc.settings, "OIDC_CLIENT_SECRET", "top-secret")
+        oidc.exchange_code("code-2")
+        assert captured["client_secret"] == "top-secret"
+
+    def test_callback_flow_passes_verifier(self, api, db, monkeypatch):
+        """مسیر کامل callback — verifier از state استخراج و به تبادل کد می‌رسد."""
+        received = {}
+
+        def fake_exchange(code, code_verifier=None):
+            received["code"], received["verifier"] = code, code_verifier
+            return {"sub": "u-88", "preferred_username": "pk.flow", "name": "کاربر PKCE"}
+
+        monkeypatch.setattr(oidc, "oidc_configured", lambda: True)
+        monkeypatch.setattr(oidc, "exchange_code", fake_exchange)
+        state = oidc.make_state("n-flow", "verifier-flow-0123456789012345678901234567890123456789")
+        r = api.get("/api/v1/auth/oidc/callback", params={"code": "c-9", "state": state},
+                    follow_redirects=False)
+        assert r.status_code == 302
+        assert received == {"code": "c-9", "verifier": "verifier-flow-0123456789012345678901234567890123456789"}
+        u = db.scalar(select(User).where(User.username == "pk.flow"))
+        assert u is not None
 
 
 class TestLDAP:

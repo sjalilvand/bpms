@@ -4,7 +4,7 @@ import {
   AuditOutlined, BellOutlined, DashboardOutlined, DatabaseOutlined, ApartmentOutlined,
   LogoutOutlined, PartitionOutlined, SolutionOutlined, TeamOutlined, UserOutlined,
   ClusterOutlined, FormOutlined, EyeOutlined, CheckSquareOutlined,
-  TableOutlined, CalendarOutlined,
+  TableOutlined, CalendarOutlined, BarChartOutlined,
 } from '@ant-design/icons';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useEffect } from 'react';
@@ -57,6 +57,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     if (hasPerm('decision.view') || user?.is_superadmin) items.push({ key: '/decisions', icon: <TableOutlined />, label: 'جدول‌های تصمیم' });
     if (hasPerm('calendar.view') || user?.is_superadmin) items.push({ key: '/calendars', icon: <CalendarOutlined />, label: 'تقویم کاری' });
     if (hasPerm('monitor.view')) items.push({ key: '/monitor', icon: <EyeOutlined />, label: 'پایش فرایندها' });
+    if (hasPerm('report.view') || user?.is_superadmin) items.push({ key: '/reports', icon: <BarChartOutlined />, label: 'گزارش‌ساز و KPI' });
     if (hasPerm('lookup.manage')) items.push({ key: '/lookups', icon: <DatabaseOutlined />, label: 'داده‌های پایه' });
     if (hasPerm('org.manage')) items.push({ key: '/org', icon: <ApartmentOutlined />, label: 'ساختار سازمانی' });
     if (hasPerm('user.manage')) items.push({ key: '/users', icon: <TeamOutlined />, label: 'کاربران و نقش‌ها' });

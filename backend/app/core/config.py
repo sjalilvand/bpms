@@ -52,6 +52,9 @@ class Settings(BaseSettings):
     OIDC_REDIRECT_URI: str = ""           # مانند http://bpms.example.com/api/v1/auth/oidc/callback
     OIDC_SCOPES: str = "openid profile email"
     OIDC_DEFAULT_ROLE: str = "operator"   # نقش خودکار کاربران تازه‌تأمین‌شده
+    # فاز ۶ — PKCE (RFC 7636): به‌طور پیش‌فرض فعال؛ برای IdP ناسازگار خاموش شود.
+    # با فعال بودن PKCE، client_secret اختیاری است (کلاینت عمومی).
+    OIDC_PKCE_ENABLED: bool = True
     # احراز هویت LDAP — خالی = غیرفعال
     LDAP_ENABLED: bool = False
     LDAP_URL: str = ""                    # ldap://dc.example.local:389 یا ldaps://...

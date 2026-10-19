@@ -25,6 +25,7 @@ from app.modules.conditions.router import router as conditions_router
 from app.modules.events.router import router as events_router
 from app.modules.external.router import router as external_router
 from app.modules.external.admin import router as integration_admin_router
+from app.modules.reports.router import router as reports_router  # فاز ۶
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -72,6 +73,7 @@ app.include_router(conditions_router, prefix=api, tags=["conditions"])
 app.include_router(events_router, prefix=api, tags=["events"])
 app.include_router(external_router, prefix=api, tags=["external-api"])
 app.include_router(integration_admin_router, prefix=api, tags=["integrations"])
+app.include_router(reports_router, prefix=api, tags=["reports"])  # فاز ۶
 
 
 @app.get("/api/v1/health")
@@ -97,6 +99,7 @@ def startup():
         from app.modules.events import listeners  # noqa (ثبت شنونده after_commit)
         from app.modules.external import models  # noqa (مدل‌های API بیرونی — فاز ۵)
         from app.modules.external import webhooks  # noqa (شنونده ارسال Webhook پس از commit)
+        from app.modules.reports import models  # noqa (گزارش ذخیره‌شده — فاز ۶)
         Base.metadata.create_all(bind=engine)
     except Exception as e:  # pragma: no cover
         print("startup create_all warning:", e)

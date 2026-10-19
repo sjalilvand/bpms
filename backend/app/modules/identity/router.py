@@ -24,6 +24,7 @@ ALL_PERMISSIONS = [
     "decision.view", "decision.manage",
     "calendar.view", "calendar.manage",
     "integration.manage",  # فاز ۵ — مدیریت کلید سرویس بیرونی و Webhook
+    "report.view", "report.manage",  # فاز ۶ — گزارش‌ساز و KPI
 ]
 
 
@@ -92,11 +93,13 @@ def oidc_callback(code: str = "", state: str = "", error: str = "", db: Session 
     frontend = (settings.OIDC_REDIRECT_URI or "").rsplit("/api/", 1)[0] or "/"
     if error:
         return RedirectResponse(f"{frontend}/login?oidc_error={error}", status_code=302)
-    nonce = oidc_mod.parse_state(state)
+    state_data = oidc_mod.parse_state_data(state)
+    nonce = state_data.get("nonce") if state_data else None
+    code_verifier = state_data.get("verifier") if state_data else None  # PKCE — فاز ۶
     if not nonce or not code:
         return RedirectResponse(f"{frontend}/login?oidc_error=state", status_code=302)
     try:
-        userinfo = oidc_mod.exchange_code(code)
+        userinfo = oidc_mod.exchange_code(code, code_verifier=code_verifier)
     except oidc_mod.OIDCError as e:
         return RedirectResponse(f"{frontend}/login?oidc_error=exchange", status_code=302)
     username = oidc_mod.extract_username(userinfo)

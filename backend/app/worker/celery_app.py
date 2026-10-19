@@ -47,6 +47,7 @@ if Celery is not None:
         timezone="UTC",
         enable_utc=True,
         task_default_queue="bpms",
+        worker_prefetch_multiplier=1,
         beat_schedule={
             "engine-tick-every-30s": {
                 "task": "bpms.engine.tick",
@@ -56,10 +57,13 @@ if Celery is not None:
                 "task": "bpms.tasks.sla_check",
                 "schedule": 300.0,
             },
+            "webhook-sweep-every-5m": {  # فاز ۶ — بازیابی تحویل‌های یتیم Webhook
+                "task": "bpms.webhooks.sweep",
+                "schedule": 300.0,
+            },
         },
         task_time_limit=120,
         task_soft_time_limit=100,
-        worker_prefetch_multiplier=1,
     )
 else:  # pragma: no cover
     celery_app = None
@@ -103,3 +107,21 @@ if Celery is not None:
     @celery_app.task(name="bpms.tasks.sla_check", ignore_result=True)
     def sla_check_task():
         return _sla_check_impl()
+
+    # ---------- فاز ۶ — صف توزیع‌شده Webhook ----------
+    @celery_app.task(bind=True, name="bpms.webhooks.deliver",
+                     max_retries=6, acks_late=True, ignore_result=False)
+    def webhook_deliver_task(self, delivery_id: int):
+        """ارسال یک ردیف تحویل Webhook — retry با backoff نمایی (۱۰s تا ۳۰۰s)."""
+        from app.modules.external.webhooks import _deliver_single, TransientDeliveryFailure
+        try:
+            return _deliver_single(delivery_id)
+        except TransientDeliveryFailure as exc:
+            countdown = min(300, 10 * (2 ** (self.request.retries or 0)))
+            raise self.retry(exc=exc, countdown=countdown)
+
+    @celery_app.task(name="bpms.webhooks.sweep", ignore_result=True)
+    def webhook_sweep_task():
+        """بازیابی تحویل‌های pending یتیم (سقوط Worker / قطعی صف)."""
+        from app.modules.external.webhooks import sweep_stale_deliveries
+        return sweep_stale_deliveries()

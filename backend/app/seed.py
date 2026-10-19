@@ -76,11 +76,11 @@ def seed():
             "form_designer": ("طراح فرم", ["form.view", "form.manage"]),
             "publisher": ("مسئول انتشار", ["process.view", "process.publish", "form.view", "form.publish", "decision.view"]),
             "base_data_admin": ("مدیر داده‌های پایه", ["lookup.manage", "form.view", "calendar.manage", "calendar.view"]),
-            "manager": ("مدیر واحد", ["task.claim", "task.complete", "process.start", "process.view", "monitor.view"]),
+            "manager": ("مدیر واحد", ["task.claim", "task.complete", "process.start", "process.view", "monitor.view", "report.view"]),
             "finance": ("کارشناس مالی", ["task.claim", "task.complete", "process.view"]),
             "operator": ("کاربر اجرایی", ["process.start", "task.claim", "task.complete"]),
-            "monitor": ("ناظر فرایند", ["monitor.view", "process.view"]),
-            "auditor": ("حسابرس", ["audit.view", "monitor.view"]),
+            "monitor": ("ناظر فرایند", ["monitor.view", "process.view", "report.view"]),
+            "auditor": ("حسابرس", ["audit.view", "monitor.view", "report.view"]),
         }
         roles = {}
         for code, (title, perms) in roles_spec.items():

@@ -17,10 +17,11 @@
 | داده پایگاه | SQLite (توسعه/پایلوت) → PostgreSQL (عملیات — فقط با تغییر `BPMS_DATABASE_URL`) |
 | Worker / صف | **Celery + Redis** (عملیات) یا زمان‌بند درون‌فرایندی (توسعه — `BPMS_SCHEDULER_MODE`) |
 | رویداد زنده | **SSE** با پل اختیاری Redis برای استقرار چندفرایندی |
-| تست بک‌اند / رابط | pytest (۱۵۹ آزمون) / Vitest (۲۵ آزمون مشترک) |
+| تست بک‌اند / رابط | pytest (۱۸۸ آزمون) / Vitest (۲۵ آزمون مشترک) |
 | E2E مرورگری | **Playwright** (۱۲ آزمون — سناریوی §۳۵ کامل از UI) |
 | آزمون بار | **Locust** — نتایج عملیاتی روی PostgreSQL: ۳٬۳۹۸ درخواست، p95 = ۴۸ms |
-| یکپارچه‌سازی | **API بیرونی با idempotency + Webhook امضاشده + OIDC/LDAP + کانکتور SOAP** (فاز ۵) |
+| یکپارچه‌سازی | **API بیرونی با idempotency + Webhook امضاشده روی صف توزیع‌شده + OIDC با PKCE/LDAP + کانکتور SOAP** (فاز ۵/۶) |
+| گزارش‌سازی | **گزارش‌ساز و KPI** (شاخص‌های کلی، گلوگاه‌ها، بار کاری، حجم روزانه، گزارش ذخیره‌شده — فاز ۶) |
 
 ## اجرای سریع
 
@@ -108,6 +109,11 @@ npm run build                   # خروجی در frontend/dist و به‌صور
 - **کانکتور SOAP 1.1**: `soap:URL|Action` با پوش از متغیرهای فرایند، escape امن، تشخیص Fault → Incident
 - **آزمون بار عملیاتی روی PostgreSQL ۱۶**: ۳٬۳۹۸ درخواست در ۲ دقیقه با ۵۰ کاربر — خطای مؤثر ۰٪ (تنها 409 رقابت Claim)، p95 = ۴۸ms
 
+### فاز ۶ — PKCE، صف توزیع‌شده Webhook و گزارش‌ساز/KPI
+- **PKCE (RFC 7636) روی OIDC**: جریان Authorization Code با روش **S256** — تولید code_verifier/challenge، حمل امن verifier در state امضاشده (بدون session)، ارسال در تبادل توکن؛ **client_secret اکنون اختیاری است** (پشتیبانی کلاینت عمومی)؛ قابل خاموش‌کردن با `BPMS_OIDC_PKCE_ENABLED=false`
+- **صف توزیع‌شده Webhook با Celery**: در `BPMS_SCHEDULER_MODE=celery` هر تحویل تسک مستقل `bpms.webhooks.deliver` روی صف Redis با **acks_late و backoff نمایی (۱۰s تا ۳۰۰s)** و سقف ۵ تلاش؛ تسک beat `bpms.webhooks.sweep` هر ۵ دقیقه تحویل‌های یتیم (سقوط Worker) را بازیابی/رد می‌کند؛ fallback خودکار به نخ پس‌زمینه در توسعه/قطعی Broker
+- **گزارش‌ساز و KPI**: صفحه «گزارش‌ساز و KPI» با شاخص‌های کلی (نرخ تکمیل، میانگین/صدک ۵۰ و ۹۵ زمان چرخه، انتظار/رسیدگی وظایف، نرخ نقض SLA)، **گلوگاه‌ها به تفکیک گام فرایند**، **بار کاری افراد و صف‌های گروهی**، حجم روزانه (نمودار) و **گزارش‌های ذخیره‌شده** با اجرای دوباره — مجوزهای `report.view` / `report.manage` + لاگ ممیزی
+
 ## سناریوی نمونه سند §۳۵ (درخواست خرید)
 
 با داده اولیه آماده است: ثبت درخواست (فرم با کد ملی/موبایل/تاریخ شمسی/اقلام) → تأیید مدیر (صف گروهی نقش مدیر) → انشعاب موازی (سرویس ثبت سفارش + اطلاع‌رسانی مالی) → خاتمه. مسیرهای «رد» و «بازگشت برای اصلاح» نیز فعال‌اند.
@@ -137,14 +143,15 @@ backend/
       tasks/         # کارتابل (inbox/group/claim/complete)
       audit/ attachments/ notifications/
       external/      # فاز ۵: API بیرونی (کلید/امضا/idempotency) + Webhook + پنل یکپارچه‌سازی
+      reports/       # فاز ۶: گزارش‌ساز و KPI — مدل گزارش ذخیره‌شده، سرویس شاخص‌ها، API
   alembic/           # مایگریشن نسخه‌بندی‌شده
   data/bpmn/         # فرایند نمونه «درخواست خرید»
-  tests/             # ۱۵۹ آزمون pytest
+  tests/             # ۱۸۸ آزمون pytest
 frontend/
   src/
     lib/             # persian.ts، formula.ts، conditions.ts (شرط‌ساز)، liveEvents.ts (SSE) + آزمون مشترک
     components/      # FormRenderer، FormDesigner، ConditionBuilder، BpmnViewer، JalaliDatePicker
-    pages/           # داشبورد، کارتابل، درخواست‌ها، فرم‌ساز، طراح BPMN + شرط‌ساز، پایش، مدیریت، جدول‌های تصمیم، تقویم کاری
+    pages/           # داشبورد، کارتابل، درخواست‌ها، فرم‌ساز، طراح BPMN + شرط‌ساز، پایش، مدیریت، جدول‌های تصمیم، تقویم کاری، گزارش‌ساز و KPI
   e2e/               # فاز ۴: ۱۲ آزمون Playwright (auth، سناریوی §۳۵، شرط‌ساز) + support
 scripts/
   e2e_api_test.py    # سناریوی §۳۵ با HTTP
@@ -160,6 +167,7 @@ docs/               # معماری، ماتریس انطباق BPMN، استقر
 - [فاز ۳ — DMN، تقویم کاری، Worker پایدار، SSE](docs/phase3.md)
 - [فاز ۴ — شرط‌ساز بصری، Playwright E2E، آزمون بار](docs/phase4.md)
 - [فاز ۵ — API بیرونی، Webhook، OIDC/LDAP، SOAP، بار PostgreSQL](docs/phase5.md)
+- [فاز ۶ — PKCE، صف توزیع‌شده Webhook، گزارش‌ساز/KPI](docs/phase6.md)
 - [راهنمای آزمون بار و نتایج نمونه](docs/load-testing.md)
 - [راهنمای استقرار و مهاجرت به PostgreSQL](docs/deployment.md)
 - [محدودیت‌ها و قابلیت‌های خارج از تحویل این نسخه](docs/limitations.md)
@@ -175,3 +183,4 @@ docs/               # معماری، ماتریس انطباق BPMN، استقر
 | سه — قابلیت‌های حرفه‌ای (DMN، تقویم کاری، Worker پایدار، SSE) | ✅ پیاده‌سازی شد |
 | چهار — آماده‌سازی بهره‌برداری (شرط‌ساز بصری، E2E مرورگری، آزمون بار) | ✅ پیاده‌سازی شد |
 | پنج — یکپارچه‌سازی (API بیرونی/Webhook، OIDC/LDAP، SOAP، بار عملیاتی PG) | ✅ پیاده‌سازی شد |
+| شش — PKCE، صف توزیع‌شده Webhook با Celery، گزارش‌ساز/KPI | ✅ پیاده‌سازی شد |
