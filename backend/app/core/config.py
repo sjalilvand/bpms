@@ -29,6 +29,20 @@ class Settings(BaseSettings):
     # CORS (توسعه فرانت‌اند)
     CORS_ORIGINS: str = "*"
 
+    # ---------- فاز ۳ ----------
+    # زمان‌بند: inprocess (پیش‌فرض توسعه/پایلوت) یا celery (عملیات — Worker پایدار)
+    SCHEDULER_MODE: str = "inprocess"
+    # فاصله تیک موتور و بررسی SLA برای زمان‌بند درون‌فرایندی
+    TICK_SECONDS: int = 30
+    SLA_SECONDS: int = 300
+    # آستانه هشدار SLA (درصد از کل زمان مجاز)
+    SLA_WARN_PCT: int = 80
+    # Redis اختیاری برای پل SSE در استقرار چندفرایندی (بدون آن هم SSE کار می‌کند)
+    REDIS_URL: str = ""
+    # Celery (فقط در SCHEDULER_MODE=celery استفاده می‌شود)
+    CELERY_BROKER_URL: str = "redis://localhost:6379/1"
+    CELERY_RESULT_BACKEND: str = ""
+
     class Config:
         env_file = ".env"
         env_prefix = "BPMS_"

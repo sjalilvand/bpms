@@ -1,14 +1,16 @@
 import { useMemo, useState } from 'react';
-import { Badge, Dropdown, Layout, Menu, Popover, List, App } from 'antd';
+import { Badge, Dropdown, Layout, Menu, Popover, List, App, Tag } from 'antd';
 import {
   AuditOutlined, BellOutlined, DashboardOutlined, DatabaseOutlined, ApartmentOutlined,
   LogoutOutlined, PartitionOutlined, SolutionOutlined, TeamOutlined, UserOutlined,
   ClusterOutlined, FormOutlined, EyeOutlined, CheckSquareOutlined,
+  TableOutlined, CalendarOutlined,
 } from '@ant-design/icons';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useEffect } from 'react';
 import { api } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
+import { useLiveEvents, dispatchUiEvent, EVT_INBOX_REFRESH, LiveEvent } from '../lib/liveEvents';
 
 const { Header, Sider, Content } = Layout;
 
@@ -18,8 +20,31 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const loc = useLocation();
   const [collapsed, setCollapsed] = useState(false);
   const [unread, setUnread] = useState(0);
+  const [live, setLive] = useState(false);
   const [notifs, setNotifs] = useState<{ id: number; title: string; body: string | null; is_read: boolean }[]>([]);
   const { message } = App.useApp();
+
+  // اتصال زنده (SSE) — فاز ۳
+  useLiveEvents({
+    onEvent: (ev: LiveEvent) => {
+      if (ev.type === 'hello') { setLive(true); return; }
+      if (ev.type === 'notification') {
+        setUnread((u) => u + 1);
+        const title = String(ev.data?.title || 'اعلان جدید');
+        const body = String(ev.data?.body || '');
+        message.open({ type: 'info', content: `${title}${body ? ' — ' + body : ''}`, duration: 6 });
+        dispatchUiEvent(EVT_INBOX_REFRESH, { reason: 'notification' });
+        // به‌روزرسانی فهرست اعلان‌ها
+        api.get('/notifications', { params: { unread_only: false } }).then((r) => {
+          setNotifs(r.data.items.slice(0, 8));
+          setUnread(r.data.unread || 0);
+        }).catch(() => {});
+      }
+      if (ev.type === 'instance' || ev.type === 'sla') {
+        dispatchUiEvent(EVT_INBOX_REFRESH, { reason: ev.type, data: ev.data });
+      }
+    },
+  });
 
   const menuItems = useMemo(() => {
     const items: { key: string; icon: React.ReactNode; label: string }[] = [
@@ -29,6 +54,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     items.push({ key: '/my-requests', icon: <SolutionOutlined />, label: 'درخواست‌های من' });
     if (hasPerm('process.start')) items.push({ key: '/processes', icon: <PartitionOutlined />, label: 'فرایندها' });
     if (hasPerm('form.view')) items.push({ key: '/forms', icon: <FormOutlined />, label: 'فرم‌ها' });
+    if (hasPerm('decision.view') || user?.is_superadmin) items.push({ key: '/decisions', icon: <TableOutlined />, label: 'جدول‌های تصمیم' });
+    if (hasPerm('calendar.view') || user?.is_superadmin) items.push({ key: '/calendars', icon: <CalendarOutlined />, label: 'تقویم کاری' });
     if (hasPerm('monitor.view')) items.push({ key: '/monitor', icon: <EyeOutlined />, label: 'پایش فرایندها' });
     if (hasPerm('lookup.manage')) items.push({ key: '/lookups', icon: <DatabaseOutlined />, label: 'داده‌های پایه' });
     if (hasPerm('org.manage')) items.push({ key: '/org', icon: <ApartmentOutlined />, label: 'ساختار سازمانی' });
@@ -73,6 +100,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <Header style={{ background: '#fff', padding: '0 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #e5e7eb', height: 56 }}>
           <div />
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            {live && <Tag color="green" style={{ marginInlineEnd: 0 }}>زنده</Tag>}
             <Popover
               trigger="click"
               placement="bottomLeft"

@@ -5,7 +5,7 @@
 سناریوی §۳۵ سند باید با این داده‌ها از ابتدا تا انتها قابل اجرا باشد.
 """
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date
 
 from sqlalchemy import select
 
@@ -16,9 +16,53 @@ from app.modules.organization.models import OrganizationUnit
 from app.modules.lookups.router import LookupDefinition, LookupItem
 from app.modules.forms.models import FormDefinition, FormVersion
 from app.modules.engine.models import ProcessDefinition, ProcessVersion
+from app.modules.decisions.models import DecisionDefinition, DecisionVersion
+from app.modules.calendars.models import WorkCalendar, CalendarHoliday
 from app.modules.identity.router import ALL_PERMISSIONS
 
 DEFAULT_PASSWORD = "Bpms@1234"
+
+# برنامه هفتگی تقویم کاری پیش‌فرض — شنبه تا چهارشنبه ۸–۱۶ با وقفه ناهار، پنجشنبه ۸–۱۲
+DEFAULT_SCHEDULE = {
+    "saturday":  {"enabled": True, "start": "08:00", "end": "16:00", "breaks": [{"start": "12:00", "end": "13:00"}]},
+    "sunday":    {"enabled": True, "start": "08:00", "end": "16:00", "breaks": [{"start": "12:00", "end": "13:00"}]},
+    "monday":    {"enabled": True, "start": "08:00", "end": "16:00", "breaks": [{"start": "12:00", "end": "13:00"}]},
+    "tuesday":   {"enabled": True, "start": "08:00", "end": "16:00", "breaks": [{"start": "12:00", "end": "13:00"}]},
+    "wednesday": {"enabled": True, "start": "08:00", "end": "16:00", "breaks": [{"start": "12:00", "end": "13:00"}]},
+    "thursday":  {"enabled": True, "start": "08:00", "end": "12:00", "breaks": []},
+    "friday":    {"enabled": False, "start": "08:00", "end": "16:00", "breaks": []},
+}
+
+# جدول تصمیم نمونه — سطح‌بندی تأیید خرید بر اساس مبلغ و اولویت
+PURCHASE_DECISION_SCHEMA = {
+    "hitPolicy": "FIRST",
+    "inputs": [
+        {"name": "total_amount", "label": "مبلغ کل (ریال)", "type": "number"},
+        {"name": "priority", "label": "اولویت", "type": "string"},
+    ],
+    "outputs": [
+        {"name": "approval_level", "label": "سطح تأیید", "defaultValue": "manager"},
+        {"name": "needs_finance_review", "label": "بررسی مالی", "defaultValue": True},
+    ],
+    "rules": [
+        {"id": "r1", "label": "خرید فوری با مبلغ بیش از ۱۰ میلیون",
+         "inputEntries": {"total_amount": "> 10000000", "priority": "high"},
+         "outputEntries": {"approval_level": "director", "needs_finance_review": True},
+         "priority": 1, "enabled": True},
+        {"id": "r2", "label": "مبلغ بیش از ۵۰ میلیون",
+         "inputEntries": {"total_amount": "> 50000000", "priority": "-"},
+         "outputEntries": {"approval_level": "director", "needs_finance_review": True},
+         "priority": 2, "enabled": True},
+        {"id": "r3", "label": "مبلغ ۱۰ تا ۵۰ میلیون",
+         "inputEntries": {"total_amount": "between 10000000..50000000", "priority": "-"},
+         "outputEntries": {"approval_level": "manager", "needs_finance_review": True},
+         "priority": 3, "enabled": True},
+        {"id": "r4", "label": "خرید خرد",
+         "inputEntries": {"total_amount": "<= 10000000", "priority": "-"},
+         "outputEntries": {"approval_level": "manager", "needs_finance_review": False},
+         "priority": 4, "enabled": True},
+    ],
+}
 
 
 def seed():
@@ -28,10 +72,10 @@ def seed():
         # ---------- نقش‌ها ----------
         roles_spec = {
             "admin": ("مدیر سامانه", ["*"]),
-            "process_designer": ("طراح فرایند", ["process.view", "process.manage", "form.view", "monitor.view"]),
+            "process_designer": ("طراح فرایند", ["process.view", "process.manage", "form.view", "monitor.view", "decision.view", "decision.manage", "calendar.view"]),
             "form_designer": ("طراح فرم", ["form.view", "form.manage"]),
-            "publisher": ("مسئول انتشار", ["process.view", "process.publish", "form.view", "form.publish"]),
-            "base_data_admin": ("مدیر داده‌های پایه", ["lookup.manage", "form.view"]),
+            "publisher": ("مسئول انتشار", ["process.view", "process.publish", "form.view", "form.publish", "decision.view"]),
+            "base_data_admin": ("مدیر داده‌های پایه", ["lookup.manage", "form.view", "calendar.manage", "calendar.view"]),
             "manager": ("مدیر واحد", ["task.claim", "task.complete", "process.start", "process.view", "monitor.view"]),
             "finance": ("کارشناس مالی", ["task.claim", "task.complete", "process.view"]),
             "operator": ("کاربر اجرایی", ["process.start", "task.claim", "task.complete"]),
@@ -122,6 +166,33 @@ def seed():
         priority_l = db.scalar(select(LookupDefinition).where(LookupDefinition.key == "priority"))
         db.flush()
 
+        # ---------- تقویم کاری پیش‌فرض (فاز ۳) ----------
+        cal = db.scalar(select(WorkCalendar).where(WorkCalendar.is_default.is_(True)))
+        if not cal:
+            cal = WorkCalendar(name="تقویم کاری پیش‌فرض",
+                               description="شنبه تا چهارشنبه ۸ تا ۱۶ (وقفه ناهار ۱۲–۱۳)، پنجشنبه ۸ تا ۱۲، جمعه تعطیل",
+                               timezone="Asia/Tehran", schedule_json=DEFAULT_SCHEDULE, is_default=True,
+                               created_by_id=users["basedata"].id)
+            db.add(cal)
+            db.flush()
+            # نمونه تعطیلی تکرارشونده سالانه — نوروز
+            db.add(CalendarHoliday(calendar_id=cal.id, date=date(2026, 3, 21),
+                                    title="نوروز", yearly=True))
+
+        # ---------- جدول تصمیم نمونه (فاز ۳) ----------
+        dd = db.scalar(select(DecisionDefinition).where(DecisionDefinition.key == "purchase_approval"))
+        if not dd:
+            dd = DecisionDefinition(key="purchase_approval", title="سطح‌بندی تأیید خرید",
+                                    description="تصمیم‌گیری بر اساس مبلغ و اولویت (DMN سبک فاز ۳)",
+                                    created_by_id=users["designer"].id)
+            db.add(dd)
+            db.flush()
+            dv = DecisionVersion(definition_id=dd.id, version=1, schema_json=PURCHASE_DECISION_SCHEMA,
+                                 created_by_id=users["designer"].id, change_note="نسخه اولیه",
+                                 status="published")
+            dv.published_at = datetime.now(timezone.utc).replace(tzinfo=None)
+            db.add(dv)
+
         # ---------- فرم‌ها ----------
         def make_form(key, title, schema, publish=True):
             f = db.scalar(select(FormDefinition).where(FormDefinition.key == key))
@@ -210,11 +281,12 @@ def seed():
             db.add(p)
             db.flush()
         if not p.versions:
-            config = {"bindings": {
+            config = {"calendarId": cal.id if cal else None, "bindings": {
                 "start": {"formDefinitionId": f_purchase.id},
                 "Task_Submit": {"formDefinitionId": f_purchase.id, "assigneeType": "field", "assigneeValue": "_initiator_id"},
                 "Task_ManagerApprove": {"formDefinitionId": f_manager.id,
                                         "assigneeType": "role", "assigneeValue": "manager",
+                                        "decisionKey": "purchase_approval",
                                         "results": [
                                             {"value": "approve", "label": "تأیید"},
                                             {"value": "reject", "label": "رد"},

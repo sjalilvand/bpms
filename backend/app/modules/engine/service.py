@@ -22,6 +22,7 @@ from app.modules.identity.models import User, utcnow
 from app.modules.forms.models import FormVersion, FormSubmission
 from app.modules.forms.validator import validate_form_data
 from app.modules.notifications.service import notify_user, notify_role
+from app.modules.events.listeners import queue_event
 from app.modules.audit.service import log_action
 
 
@@ -47,6 +48,49 @@ def _resolve_form_version(db: Session, binding: dict) -> FormVersion | None:
         return None
     return db.scalar(select(FormVersion).where(
         FormVersion.form_id == fid, FormVersion.status == "published").order_by(FormVersion.version.desc()))
+
+
+def _version_calendar_id(version: ProcessVersion) -> int | None:
+    """تقویم کاری متصل به نسخه فرایند (فاز ۳) — محاسبه مهلت‌ها بر پایه ساعات اداری."""
+    cid = (version.config_json or {}).get("calendarId")
+    try:
+        return int(cid) if cid else None
+    except (TypeError, ValueError):
+        return None
+
+
+def compute_due_for_task(db: Session, version: ProcessVersion, due_hours) -> datetime | None:
+    """مهلت انجام: اگر تقویم کاری متصل بود محاسبه کاری؛ وگرنه خطی."""
+    if not due_hours:
+        return None
+    base = now()
+    hours = float(due_hours)
+    cid = _version_calendar_id(version)
+    if cid:
+        from app.modules.calendars import service as cal_svc
+        from app.modules.calendars.models import WorkCalendar
+        cal = db.get(WorkCalendar, cid)
+        if cal and cal_svc.calendar_has_working_days(cal):
+            try:
+                return cal_svc.add_business_hours(cal, base, hours)
+            except Exception:
+                pass
+    return base + timedelta(hours=hours)
+
+
+def apply_decision_binding(db: Session, version: ProcessVersion, spec_id: str, data: dict) -> dict:
+    """ارزیابی جدول تصمیم متصل به فعالیت (فاز ۳) و ادغام خروجی در داده.
+
+    خطای تصمیم به‌صورت خطای کنترل‌شده بازمی‌گردد (مانع تکمیل وظیفه می‌شود)
+    تا داده ناقص به دروازه‌ها نرسد.
+    """
+    binding = _binding(version, spec_id)
+    key = binding.get("decisionKey")
+    if not key:
+        return {}
+    from app.modules.decisions import service as dsvc
+    result = dsvc.evaluate_by_key(db, str(key), {k: v for k, v in data.items() if not k.startswith("_")})
+    return result
 
 
 def _resolve_assignee(db: Session, binding: dict, wf_data: dict, instance: ProcessInstance):
@@ -141,7 +185,7 @@ def _sync_tasks(db: Session, instance: ProcessInstance, wf) -> None:
             name=getattr(spec, "bpmn_name", None) or spec.name, task_type="user",
             status="ready", assignee_id=assignee_id, candidate_role=candidate_role,
             form_version_id=fv.id if fv else None,
-            due_at=(now() + timedelta(hours=float(due_hours))) if due_hours else None,
+            due_at=compute_due_for_task(db, version, due_hours),
         )
         db.add(row)
         db.flush()
@@ -158,6 +202,7 @@ def _sync_tasks(db: Session, instance: ProcessInstance, wf) -> None:
         if row.task_uuid not in active_uuids:
             row.status = "cancelled"
             add_event(db, instance.id, "task_cancelled", task_id=row.id, spec_id=row.spec_id, task_name=row.name)
+            queue_event(db, [instance.started_by_id], "instance", {"instance_id": instance.id, "reason": "task_cancelled"})
 
 
 # ---------------- دریافت وضعیت موتور ----------------
@@ -229,6 +274,18 @@ def complete_task(db: Session, task: EngineTask, user: User, *, data: dict | Non
     if comment:
         engine_task.data["_comment"] = comment
 
+    # جدول تصمیم متصل به فعالیت (فاز ۳) — خروجی به متغیرهای فرایند ادغام می‌شود
+    decision_out = apply_decision_binding(db, instance.version, task.spec_id, engine_task.data)
+    for k, v in decision_out.items():
+        if not k.startswith("_"):
+            engine_task.data[k] = v
+    if decision_out:
+        add_event(db, instance.id, "decision_applied", task_id=task.id, spec_id=task.spec_id,
+                  task_name=task.name, actor_id=user.id,
+                  detail={"table": decision_out.get("_decisionKey"),
+                          "rule": decision_out.get("_matchedRule"),
+                          "version": decision_out.get("_decisionVersion")})
+
     engine_task.complete()
     adapter.do_engine_steps(wf)
 
@@ -249,6 +306,9 @@ def complete_task(db: Session, task: EngineTask, user: User, *, data: dict | Non
 
     db.add(FormSubmission(form_version_id=task.form_version_id, instance_id=instance.id, task_id=task.id,
                           data_json=cleaned, submitted_by_id=user.id, status="draft" if partial else "final"))
+    # رویداد زنده برای ناظران نمونه (SSE فاز ۳)
+    queue_event(db, [instance.started_by_id, user.id], "instance",
+                {"instance_id": instance.id, "reason": "task_completed", "task": task.name})
     db.commit()
     log_action(db, user.id, "task.completed", "task", task.id, {"instance": instance.id, "result": result})
     return task

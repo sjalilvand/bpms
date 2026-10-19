@@ -7,6 +7,7 @@ from sqlalchemy.orm import Mapped, mapped_column, Session
 
 from app.core.database import Base
 from app.modules.identity.models import utcnow, User, Role
+from app.modules.events.listeners import queue_event
 from sqlalchemy import select
 
 
@@ -26,6 +27,7 @@ def notify_user(db: Session, user_id: int | None, title: str, body: str = "", li
     if not user_id:
         return
     db.add(Notification(user_id=user_id, title=title[:200], body=body, link=link))
+    queue_event(db, [user_id], "notification", {"title": title[:200], "body": body, "link": link})
 
 
 def notify_role(db: Session, role_code: str | None, title: str, body: str = "", link: str | None = None):
@@ -34,6 +36,10 @@ def notify_role(db: Session, role_code: str | None, title: str, body: str = "", 
     role = db.scalar(select(Role).where(Role.code == role_code))
     if not role:
         return
+    targets = []
     for u in role.users:
         if u.is_active:
             db.add(Notification(user_id=u.id, title=title[:200], body=body, link=link))
+            targets.append(u.id)
+    if targets:
+        queue_event(db, targets, "notification", {"title": title[:200], "body": body, "link": link})

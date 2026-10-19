@@ -19,6 +19,8 @@ ALL_PERMISSIONS = [
     "task.claim", "task.complete", "task.delegate",
     "monitor.view", "audit.view",
     "lookup.manage", "org.manage", "user.manage", "instance.manage",
+    "decision.view", "decision.manage",
+    "calendar.view", "calendar.manage",
 ]
 
 

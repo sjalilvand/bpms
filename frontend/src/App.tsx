@@ -16,6 +16,8 @@ import LookupsPage from './pages/LookupsPage';
 import OrgPage from './pages/OrgPage';
 import UsersPage from './pages/UsersPage';
 import AuditPage from './pages/AuditPage';
+import DecisionsPage from './pages/DecisionsPage';
+import CalendarsPage from './pages/CalendarsPage';
 
 function Protected({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -38,6 +40,8 @@ export default function App() {
         <Route path="/forms/:id/design" element={<Protected><FormDesignerPage /></Protected>} />
         <Route path="/processes" element={<Protected><ProcessesPage /></Protected>} />
         <Route path="/processes/:id/design" element={<Protected><ProcessDesignerPage /></Protected>} />
+        <Route path="/decisions" element={<Protected><DecisionsPage /></Protected>} />
+        <Route path="/calendars" element={<Protected><CalendarsPage /></Protected>} />
         <Route path="/lookups" element={<Protected><LookupsPage /></Protected>} />
         <Route path="/org" element={<Protected><OrgPage /></Protected>} />
         <Route path="/users" element={<Protected><UsersPage /></Protected>} />

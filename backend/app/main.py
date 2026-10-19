@@ -19,6 +19,9 @@ from app.modules.tasks.router import router as tasks_router
 from app.modules.audit.router import router as audit_router
 from app.modules.attachments.router import router as attachments_router
 from app.modules.notifications.router import router as notifications_router
+from app.modules.decisions.router import router as decisions_router
+from app.modules.calendars.router import router as calendars_router
+from app.modules.events.router import router as events_router
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -60,6 +63,9 @@ app.include_router(tasks_router, prefix=api, tags=["tasks"])
 app.include_router(audit_router, prefix=api, tags=["audit"])
 app.include_router(attachments_router, prefix=api, tags=["attachments"])
 app.include_router(notifications_router, prefix=api, tags=["notifications"])
+app.include_router(decisions_router, prefix=api, tags=["decisions"])
+app.include_router(calendars_router, prefix=api, tags=["calendars"])
+app.include_router(events_router, prefix=api, tags=["events"])
 
 
 @app.get("/api/v1/health")
@@ -77,12 +83,29 @@ def startup():
         from app.modules.lookups import router as _lr  # noqa (شامل مدل‌های Lookup)
         from app.modules.forms import models  # noqa
         from app.modules.engine import models  # noqa
+        from app.modules.decisions import models  # noqa
+        from app.modules.calendars import models  # noqa
         from app.modules.audit import service  # noqa
         from app.modules.attachments import router as _ar  # noqa (مدل Attachment)
         from app.modules.notifications import service  # noqa
+        from app.modules.events import listeners  # noqa (ثبت شنونده after_commit)
         Base.metadata.create_all(bind=engine)
     except Exception as e:  # pragma: no cover
         print("startup create_all warning:", e)
+
+
+@app.on_event("startup")
+async def startup_events():
+    """فاز ۳: گذرگاه رویداد زنده (SSE) + زمان‌بند پایدار."""
+    import asyncio
+    from app.modules.events.bus import bus
+    bus.set_loop(asyncio.get_running_loop())
+    await bus.start_redis_bridge()
+    if (settings.SCHEDULER_MODE or "inprocess").lower() == "inprocess":
+        from app.worker.scheduler import scheduler
+        scheduler.start()
+    elif (settings.SCHEDULER_MODE or "").lower() == "celery":
+        print("scheduler mode = celery — زمان‌بندی توسط Worker پایدار انجام می‌شود")
 
 
 # ---------- سرویس‌دهی رابط کاربری ----------

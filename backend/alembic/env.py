@@ -14,6 +14,8 @@ from app.modules.organization import models  # noqa
 from app.modules.lookups import router as _lookups  # noqa
 from app.modules.forms import models  # noqa
 from app.modules.engine import models  # noqa
+from app.modules.decisions import models  # noqa
+from app.modules.calendars import models  # noqa
 from app.modules.audit import service  # noqa
 from app.modules.attachments import router as _att  # noqa
 from app.modules.notifications import service  # noqa

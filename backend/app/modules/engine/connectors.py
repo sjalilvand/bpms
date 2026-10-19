@@ -4,6 +4,7 @@
 انواع مجاز در این نسخه:
 - mock:<name>   → سرویس‌های آزمایشی داخلی (ثبت سفارش و ...)
 - http:<METHOD>:<URL> → فراخوانی REST با timeout و retry محدود
+- dmn:<decisionKey>  → ارزیابی جدول تصمیم (فاز ۳) و ادغام خروجی در متغیرها
 
 قرارداد: داده ورودی از متغیرهای فرایند؛ پاسخ dict به متغیرهای فرایند ادغام می‌شود.
 خطا با بازگشت False → فعالیت در حالت ERROR و ایجاد Incident (AC-15).
@@ -34,6 +35,28 @@ def _sanitize(data: dict) -> dict:
     """پوشاندن اطلاعات حساس در لاگ."""
     return {k: ("***" if any(s in k.lower() for s in ("password", "token", "secret")) else v)
             for k, v in list(data.items())[:MAX_PAYLOAD_KEYS]}
+
+
+def _current_db():
+    """نشست کوتاه‌عمر برای کانکتورهایی که به پایگاه نیاز دارند (مانند dmn:)."""
+    from app.core.database import SessionLocal
+    return SessionLocal()
+
+
+def _run_dmn(key: str, data: dict):
+    """ارزیابی جدول تصمیم با نشست کوتاه‌عمر (فاز ۳)."""
+    from app.modules.decisions import service as dsvc
+    from app.modules.decisions.engine import DecisionError
+    if not key:
+        raise RuntimeError("کلید جدول تصمیم مشخص نشده است")
+    inputs = {k: v for k, v in (data or {}).items() if not k.startswith("_")}
+    db = _current_db()
+    try:
+        return dsvc.evaluate_by_key(db, key, inputs)
+    except DecisionError as e:
+        raise RuntimeError(f"خطای ارزیابی جدول تصمیم: {e}")
+    finally:
+        db.close()
 
 
 def execute_connector(task, spec) -> bool:
@@ -76,6 +99,9 @@ def _run(ref: str, data: dict):
         if not fn:
             raise RuntimeError(f"کانکتور آزمایشی «{rest}» تعریف نشده است")
         return fn(_sanitize(data))
+    if kind == "dmn":
+        # فاز ۳: ارزیابی جدول تصمیم منتشرشده — داده ورودی = متغیرهای فرایند
+        return _run_dmn(rest, data)
     if kind == "http":
         # فرمت: http:METHOD:URL  — بدنه از متغیرهای فرایند ساخته می‌شود
         method, _, url = rest.partition(":")

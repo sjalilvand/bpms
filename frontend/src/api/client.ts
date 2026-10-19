@@ -80,6 +80,7 @@ import type { FormSchema as FormSchemaT } from '../lib/formSchema';
 
 export interface ProcessConfig {
   bindings: Record<string, TaskBinding>;
+  calendarId?: number | null;
 }
 
 export interface TaskBinding {
@@ -89,6 +90,7 @@ export interface TaskBinding {
   results?: { value: string; label: string }[];
   dueHours?: number | null;
   connector?: string;
+  decisionKey?: string | null;
 }
 
 export interface ProcessRow {
@@ -152,4 +154,67 @@ export interface InstanceDetailT extends InstanceRow {
     created_at_jalali: string | null;
   }[];
   incidents: { id: number; spec_id: string | null; message: string; created_at: string | null }[];
+}
+
+// ---------- جدول تصمیم (DMN سبک فاز ۳) ----------
+export interface DecisionInput {
+  name: string;
+  label: string;
+  type?: 'number' | 'string' | 'boolean';
+}
+
+export interface DecisionOutput {
+  name: string;
+  label: string;
+  defaultValue?: unknown;
+}
+
+export interface DecisionRule {
+  id?: string;
+  label?: string;
+  inputEntries: Record<string, string>;
+  outputEntries: Record<string, unknown>;
+  priority?: number;
+  enabled?: boolean;
+}
+
+export interface DecisionSchemaT {
+  hitPolicy: 'FIRST' | 'UNIQUE' | 'ANY' | 'PRIORITY' | 'COLLECT';
+  inputs: DecisionInput[];
+  outputs: DecisionOutput[];
+  rules: DecisionRule[];
+}
+
+export interface DecisionRow {
+  id: number;
+  key: string;
+  title: string;
+  description: string | null;
+  latest_published: VersionRow | null;
+}
+
+// ---------- تقویم کاری (فاز ۳) ----------
+export interface DayRuleT {
+  enabled: boolean;
+  start: string;
+  end: string;
+  breaks: { start: string; end: string }[];
+}
+
+export interface CalendarRow {
+  id: number;
+  name: string;
+  description: string | null;
+  timezone: string;
+  is_default: boolean;
+  schedule_json: Record<string, DayRuleT>;
+  has_working_days?: boolean;
+  holiday_count?: number;
+  holidays?: {
+    id: number;
+    date: string;
+    date_jalali: string | null;
+    title: string;
+    yearly: boolean;
+  }[];
 }

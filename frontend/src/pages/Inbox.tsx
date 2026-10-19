@@ -46,6 +46,13 @@ export default function Inbox() {
 
   useEffect(() => { load(); }, [load]);
 
+  // به‌روزرسانی زنده کارتابل از رویدادهای SSE (فاز ۳)
+  useEffect(() => {
+    const onRefresh = () => { load(); };
+    window.addEventListener('bpms:inbox-refresh', onRefresh);
+    return () => window.removeEventListener('bpms:inbox-refresh', onRefresh);
+  }, [load]);
+
   // باز کردن مستقیم وظیفه از لینک اعلان
   useEffect(() => {
     const tid = sp.get('task');

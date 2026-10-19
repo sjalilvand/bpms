@@ -217,6 +217,21 @@ def _validate(db: Session, v: ProcessVersion) -> dict:
         values = [r.get("value") for r in results if r.get("value")]
         if len(values) != len(set(values)):
             errors.append(f"اتصال «{tid}»: مقادیر نتیجه تکراری است")
+        # جدول تصمیم متصل (فاز ۳) — باید موجود و منتشرشده باشد
+        dkey = b.get("decisionKey")
+        if dkey:
+            from app.modules.decisions.models import DecisionDefinition
+            dd = db.scalar(select(DecisionDefinition).where(DecisionDefinition.key == dkey))
+            if not dd:
+                errors.append(f"اتصال «{tid}»: جدول تصمیم «{dkey}» یافت نشد")
+            elif not dd.latest_published:
+                errors.append(f"اتصال «{tid}»: جدول تصمیم «{dkey}» نسخه منتشرشده ندارد")
+    # تقویم کاری متصل به نسخه (فاز ۳)
+    cal_id = (v.config_json or {}).get("calendarId")
+    if cal_id:
+        from app.modules.calendars.models import WorkCalendar
+        if not db.get(WorkCalendar, int(cal_id)):
+            errors.append("تقویم کاری متصل به نسخه یافت نشد")
     # ۵) شناسه‌های تکراری در XML
     import re as _re
     ids = _re.findall(r'id="([^"]+)"', v.bpmn_xml)

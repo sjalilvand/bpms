@@ -36,6 +36,17 @@ export default function InstanceDetail() {
 
   useEffect(() => { load(); }, [load]);
 
+  // به‌روزرسانی زنده نمونه از رویدادهای SSE (فاز ۳)
+  useEffect(() => {
+    const onRefresh = (e: Event) => {
+      const detail = (e as CustomEvent).detail || {};
+      if (detail?.instance_id && Number(detail.instance_id) !== Number(id)) return;
+      load();
+    };
+    window.addEventListener('bpms:inbox-refresh', onRefresh);
+    return () => window.removeEventListener('bpms:inbox-refresh', onRefresh);
+  }, [load, id]);
+
   const cancel = async (reason: string) => {
     try {
       await api.post(`/process-instances/${id}/cancel`, { reason });

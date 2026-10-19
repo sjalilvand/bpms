@@ -30,10 +30,13 @@ export default function ProcessDesignerPage() {
   const [validation, setValidation] = useState<{ errors: string[]; warnings: string[] } | null>(null);
   const [procs, setProcs] = useState<{ id: string; name: string }[]>([]);
   const [mainPid, setMainPid] = useState('');
+  const [calendarId, setCalendarId] = useState<number | null>(null);
   const [newVersionOpen, setNewVersionOpen] = useState(false);
   const [formsList, setFormsList] = useState<{ id: number; title: string }[]>([]);
   const [usersList, setUsersList] = useState<{ id: number; full_name: string }[]>([]);
   const [rolesList, setRolesList] = useState<{ code: string; title: string }[]>([]);
+  const [decisionsList, setDecisionsList] = useState<{ id: number; key: string; title: string }[]>([]);
+  const [calendarsList, setCalendarsList] = useState<{ id: number; name: string; is_default: boolean }[]>([]);
   const [subformEdit, setSubformEdit] = useState<{ formId: number; title: string } | null>(null);
 
   const load = useCallback(async () => {
@@ -47,6 +50,7 @@ export default function ProcessDesignerPage() {
       setVersion(v.data);
       setXml(v.data.bpmn_xml);
       setBindings(v.data.config_json?.bindings || {});
+      setCalendarId(v.data.config_json?.calendarId || null);
       setMainPid(v.data.main_process_id);
     } catch (e) { message.error(extractError(e)); }
   }, [processId, versionId]);
@@ -56,6 +60,8 @@ export default function ProcessDesignerPage() {
     api.get('/forms').then((r) => setFormsList(r.data.items)).catch(() => {});
     api.get('/users', { params: { page_size: 200 } }).then((r) => setUsersList(r.data.items)).catch(() => {});
     api.get('/roles').then((r) => setRolesList(r.data.items)).catch(() => {});
+    api.get('/decisions').then((r) => setDecisionsList(r.data.items)).catch(() => {});
+    api.get('/calendars').then((r) => setCalendarsList(r.data.items)).catch(() => {});
   }, []);
 
   // انتخاب عنصر روی نمودار
@@ -105,7 +111,7 @@ export default function ProcessDesignerPage() {
       await api.put(`/processes/versions/${vid}`, {
         bpmn_xml: content,
         main_process_id: mainPid,
-        config_json: { bindings },
+        config_json: { bindings, calendarId },
         change_note: changeNote,
       });
       if (publish) {
@@ -135,7 +141,7 @@ export default function ProcessDesignerPage() {
       const content = await getXml();
       // ابتدا ذخیره موقت محتوای جاری برای اعتبارسنجی دقیق
       await api.put(`/processes/versions/${versionId}`, {
-        bpmn_xml: content, main_process_id: mainPid, config_json: { bindings }, change_note: version?.change_note || '',
+        bpmn_xml: content, main_process_id: mainPid, config_json: { bindings, calendarId }, change_note: version?.change_note || '',
       });
       const r = await api.post(`/processes/versions/${versionId}/validate`);
       setValidation(r.data);
@@ -214,6 +220,16 @@ export default function ProcessDesignerPage() {
           message={<Space>فرایند اصلی: <Select size="small" style={{ minWidth: 260 }} value={mainPid} onChange={setMainPid}
             options={procs.map((p: any) => ({ value: p.id, label: `${p.name} (${p.id})` }))} /></Space>} />
       )}
+      {version && (
+        <Alert style={{ marginBottom: 10 }} type="info"
+          message={<Space wrap>
+            <span>تقویم کاری نسخه (برای محاسبه مهلت وظایف):</span>
+            <Select size="small" style={{ minWidth: 240 }} allowClear placeholder="بدون تقویم (مهلت خطی)"
+              value={calendarId}
+              onChange={(v) => setCalendarId(v ?? null)}
+              options={calendarsList.map((c) => ({ value: c.id, label: `${c.name}${c.is_default ? ' — پیش‌فرض' : ''}` }))} />
+          </Space>} />
+      )}
       {validation && (
         <Alert style={{ marginBottom: 10 }} type={validation.errors.length ? 'error' : 'warning'} closable
           message={validation.errors.length ? 'خطاهای قطعی (مانع انتشار)' : 'هشدارها (انتشار ممکن است)'}
@@ -249,6 +265,14 @@ export default function ProcessDesignerPage() {
                       <Select allowClear placeholder="انتخاب فرم" value={binding?.formDefinitionId || null}
                         onChange={(v) => patchBinding(selectedEl.id, 'formDefinitionId', v)}
                         options={formsList.map((f) => ({ value: f.id, label: f.title }))} />
+                    </Form.Item>
+                  )}
+                  {isUserTask && (
+                    <Form.Item label="جدول تصمیم متصل (DMN) — خروجی به متغیرهای فرایند ادغام می‌شود">
+                      <Select allowClear showSearch optionFilterProp="label" placeholder="بدون جدول تصمیم"
+                        value={binding?.decisionKey || null}
+                        onChange={(v) => patchBinding(selectedEl.id, 'decisionKey', v)}
+                        options={decisionsList.map((d) => ({ value: d.key, label: `${d.title} (${d.key})` }))} />
                     </Form.Item>
                   )}
                   {isUserTask && (
@@ -320,7 +344,7 @@ export default function ProcessDesignerPage() {
           try {
             const content = await getXml();
             const r = await api.post(`/processes/${processId}/versions`, {
-              bpmn_xml: content, main_process_id: mainPid, config_json: { bindings },
+              bpmn_xml: content, main_process_id: mainPid, config_json: { bindings, calendarId },
               change_note: 'نسخه جدید از مدل جاری',
             });
             message.success('نسخه پیش‌نویس جدید ساخته شد');
