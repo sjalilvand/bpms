@@ -43,6 +43,24 @@ class Settings(BaseSettings):
     CELERY_BROKER_URL: str = "redis://localhost:6379/1"
     CELERY_RESULT_BACKEND: str = ""
 
+    # ---------- فاز ۵ — یکپارچه‌سازی ----------
+    # ورود سازمانی OIDC (Authorization Code) — خالی = غیرفعال
+    OIDC_ENABLED: bool = False
+    OIDC_ISSUER: str = ""                 # مانند https://sso.example.com/realms/bpms
+    OIDC_CLIENT_ID: str = ""
+    OIDC_CLIENT_SECRET: str = ""
+    OIDC_REDIRECT_URI: str = ""           # مانند http://bpms.example.com/api/v1/auth/oidc/callback
+    OIDC_SCOPES: str = "openid profile email"
+    OIDC_DEFAULT_ROLE: str = "operator"   # نقش خودکار کاربران تازه‌تأمین‌شده
+    # احراز هویت LDAP — خالی = غیرفعال
+    LDAP_ENABLED: bool = False
+    LDAP_URL: str = ""                    # ldap://dc.example.local:389 یا ldaps://...
+    LDAP_BIND_DN: str = ""                # حساب خدماتی جست‌وجو
+    LDAP_BIND_PASSWORD: str = ""
+    LDAP_USER_BASE: str = ""              # مانند OU=Users,DC=example,DC=local
+    LDAP_USER_FILTER: str = "(&(objectClass=user)(sAMAccountName={username}))"
+    LDAP_DEFAULT_ROLE: str = "operator"
+
     class Config:
         env_file = ".env"
         env_prefix = "BPMS_"

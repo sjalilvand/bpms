@@ -20,11 +20,13 @@
 ## زیرساخت
 
 - ✅ **فاز ۳**: Worker پایدار (Celery) و SSE پیاده شد — بدون Redis، حالت درون‌فرایندی به‌صورت خودکار فعال می‌شود (BPMS_SCHEDULER_MODE).
-- ارائه API بیرونی با کلید/امضای Webhook و idempotency key اختصاصی هنوز کامل نشده (الگوی idempotency در تکمیل وظیفه برقرار است).
+- ✅ **فاز ۵**: API بیرونی با کلید/امضای HMAC و idempotency key پیاده شد (docs/phase5.md) — الگوی idempotency تکمیل وظیفه از قبل برقرار بود.
+- ✅ **فاز ۵**: ورود سازمانی OIDC (Authorization Code) و LDAP (bind-then-search با ldap3) پیاده شد — PKCE فاز بعد.
+- ✅ **فاز ۵**: کانکتور SOAP 1.1 (`soap:URL|Action`) پیاده شد — WSDL-first و WS-Security فاز جداگانه.
 - پیامک/ایمیل اعلان متصل نشده (فقط اعلان درون‌سامانه + SSE).
-- SOAP و احراز هویت OIDC/LDAP فاز جداگانه است.
 - گزارش‌ساز عمومی، KPI میانگین زمان رسیدگی و گلوگاه‌ها فاز جداگانه است.
 - کنترل هم‌زمانی روی PostgreSQL با SELECT FOR UPDATE به‌صورت صریح افزوده نشود، اتکا به تراکنش استاندارد است (نقطه توسعه مستند در architecture.md).
+- محدودیت نرخ API بیرونی per-process است؛ برای استقرار چندنمونه‌ای از limit در nginx یا صف توزیع‌شده استفاده شود (نقطه توسعه مستند در phase5.md).
 
 ## تست
 

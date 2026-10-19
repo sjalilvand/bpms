@@ -27,3 +27,4 @@ frontend/dist/
 backend/data/e2e.db*
 frontend/test-results/
 frontend/playwright-report/
+backend/data/pgdata/

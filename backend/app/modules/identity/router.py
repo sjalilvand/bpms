@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
-"""APIهای هویت: ورود، کاربر جاری، مدیریت کاربران و نقش‌ها."""
+"""APIهای هویت: ورود، کاربر جاری، ورود سازمانی OIDC، LDAP، مدیریت کاربران و نقش‌ها."""
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.deps import get_current_user, has_permission, require_perm
 from app.core.security import create_access_token, verify_password, hash_password
@@ -21,6 +23,7 @@ ALL_PERMISSIONS = [
     "lookup.manage", "org.manage", "user.manage", "instance.manage",
     "decision.view", "decision.manage",
     "calendar.view", "calendar.manage",
+    "integration.manage",  # فاز ۵ — مدیریت کلید سرویس بیرونی و Webhook
 ]
 
 
@@ -61,10 +64,71 @@ def user_out(u: User):
 
 
 # ---------- Auth ----------
+@router.get("/auth/config")
+def auth_config():
+    """پیکربندی عمومی صفحه ورود (بدون احراز هویت) — فاز ۵."""
+    from app.modules.identity.oidc import oidc_configured
+    from app.modules.identity.ldap_auth import ldap_configured
+    return {"oidc_enabled": oidc_configured(), "ldap_enabled": ldap_configured()}
+
+
+@router.get("/auth/oidc/login")
+def oidc_login():
+    """شروع جریان مجاز OIDC — هدایت مرورگر به IdP سازمانی."""
+    from app.modules.identity.oidc import oidc_configured, build_authorize_url, OIDCError
+    if not oidc_configured():
+        raise HTTPException(400, "ورود سازمانی OIDC فعال نشده است")
+    try:
+        return RedirectResponse(build_authorize_url(), status_code=302)
+    except OIDCError as e:
+        raise HTTPException(502, str(e))
+
+
+@router.get("/auth/oidc/callback")
+def oidc_callback(code: str = "", state: str = "", error: str = "", db: Session = Depends(get_db), request: Request = None):
+    """تبادل کد، تأمین کاربر و هدایت به رابط کاربری با توکن BPMS."""
+    from app.modules.identity import oidc as oidc_mod
+    from app.modules.identity.ldap_auth import provision_user
+    frontend = (settings.OIDC_REDIRECT_URI or "").rsplit("/api/", 1)[0] or "/"
+    if error:
+        return RedirectResponse(f"{frontend}/login?oidc_error={error}", status_code=302)
+    nonce = oidc_mod.parse_state(state)
+    if not nonce or not code:
+        return RedirectResponse(f"{frontend}/login?oidc_error=state", status_code=302)
+    try:
+        userinfo = oidc_mod.exchange_code(code)
+    except oidc_mod.OIDCError as e:
+        return RedirectResponse(f"{frontend}/login?oidc_error=exchange", status_code=302)
+    username = oidc_mod.extract_username(userinfo)
+    if not username:
+        return RedirectResponse(f"{frontend}/login?oidc_error=identity", status_code=302)
+    u = provision_user(db, username, str(userinfo.get("name") or username), userinfo.get("email"))
+    if not u.is_active:
+        return RedirectResponse(f"{frontend}/login?oidc_error=inactive", status_code=302)
+    token = create_access_token(str(u.id), {"username": u.username})
+    log_action(db, u.id, "login.oidc", "user", u.id, {"username": u.username}, request)
+    db.commit()
+    return RedirectResponse(f"{frontend}/login?oidc_token={token}", status_code=302)
+
+
 @router.post("/auth/login")
 def login(body: LoginIn, request: Request, db: Session = Depends(get_db)):
     user = db.scalar(select(User).where(User.username == body.username.strip()))
-    if not user or not verify_password(body.password, user.password_hash):
+    ok = False
+    if user and user.password_hash and not user.password_hash.startswith("!"):
+        ok = verify_password(body.password, user.password_hash)
+    if not ok:
+        # فاز ۵: تلاش LDAP در صورت فعال بودن — کاربر محلی یافت/تأمین می‌شود
+        from app.modules.identity.ldap_auth import ldap_configured, authenticate_ldap
+        if ldap_configured():
+            try:
+                user = authenticate_ldap(db, body.username.strip(), body.password)
+                ok = user is not None and user.is_active
+                if ok:
+                    db.commit()
+            except Exception:
+                ok = False
+    if not ok or not user:
         log_action(db, None, "login.failed", "user", None, {"username": body.username}, request)
         raise HTTPException(status_code=401, detail="نام کاربری یا گذرواژه نادرست است")
     if not user.is_active:

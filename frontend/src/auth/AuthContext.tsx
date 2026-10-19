@@ -23,6 +23,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // فاز ۵: توکن بازگشتی از ورود سازمانی OIDC (?oidc_token=...)
+    const url = new URL(window.location.href);
+    const oidcToken = url.searchParams.get('oidc_token');
+    if (oidcToken) {
+      localStorage.setItem('bpms_token', oidcToken);
+      url.searchParams.delete('oidc_token');
+      window.history.replaceState({}, '', url.pathname + (url.searchParams.toString() ? `?${url.searchParams}` : ''));
+    }
     const token = localStorage.getItem('bpms_token');
     if (!token) { setLoading(false); return; }
     api.get('/auth/me')

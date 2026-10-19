@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
-import { Button, Card, Form, Input, Typography, App } from 'antd';
-import { LockOutlined, UserOutlined } from '@ant-design/icons';
+import React, { useEffect, useState } from 'react';
+import { Button, Card, Divider, Form, Input, Typography, App } from 'antd';
+import { LockOutlined, UserOutlined, SafetyCertificateOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { extractError } from '../api/client';
@@ -10,6 +10,20 @@ export default function Login() {
   const { message } = App.useApp();
   const nav = useNavigate();
   const [loading, setLoading] = useState(false);
+  const [oidcEnabled, setOidcEnabled] = useState(false);
+  const [oidcError, setOidcError] = useState('');
+
+  useEffect(() => {
+    // فاز ۵: نمایش دکمه ورود سازمانی در صورت فعال بودن OIDC + خطای بازگشتی از callback
+    fetch('/api/v1/auth/config').then((r) => r.json())
+      .then((c) => setOidcEnabled(!!c.oidc_enabled)).catch(() => {});
+    const params = new URLSearchParams(window.location.search);
+    const err = params.get('oidc_error');
+    if (err) setOidcError(err === 'state' ? 'نشست ورود سازمانی منقضی شده؛ دوباره تلاش کنید'
+      : err === 'inactive' ? 'حساب شما غیرفعال است'
+        : err === 'identity' ? 'هویت از سرویس سازمانی دریافت نشد'
+          : 'ورود سازمانی ناموفق بود؛ دوباره تلاش کنید');
+  }, []);
 
   const onFinish = async (values: { username: string; password: string }) => {
     setLoading(true);
@@ -47,6 +61,19 @@ export default function Login() {
             ورود به سامانه
           </Button>
         </Form>
+        {oidcEnabled && (
+          <>
+            <Divider plain style={{ fontSize: 12, margin: '12px 0 8px' }}>یا</Divider>
+            <Button block size="large" icon={<SafetyCertificateOutlined />} href="/api/v1/auth/oidc/login">
+              ورود سازمانی (SSO سازمانی)
+            </Button>
+          </>
+        )}
+        {oidcError && (
+          <Typography.Text type="danger" style={{ display: 'block', marginTop: 12, fontSize: 12 }}>
+            {oidcError}
+          </Typography.Text>
+        )}
         <div style={{ marginTop: 16, textAlign: 'center', fontSize: 12, color: '#94a3b8' }}>
           کاربران نمونه: admin / manager / finance1 / user1 — گذرواژه: Bpms@1234
         </div>

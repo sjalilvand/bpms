@@ -5,6 +5,7 @@
 - mock:<name>   → سرویس‌های آزمایشی داخلی (ثبت سفارش و ...)
 - http:<METHOD>:<URL> → فراخوانی REST با timeout و retry محدود
 - dmn:<decisionKey>  → ارزیابی جدول تصمیم (فاز ۳) و ادغام خروجی در متغیرها
+- soap:<URL>[|<SOAPAction>] → فراخوانی سرویس SOAP 1.1 (فاز ۵) — پارامترها از متغیرهای فرایند
 
 قرارداد: داده ورودی از متغیرهای فرایند؛ پاسخ dict به متغیرهای فرایند ادغام می‌شود.
 خطا با بازگشت False → فعالیت در حالت ERROR و ایجاد Incident (AC-15).
@@ -13,6 +14,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 import logging
 
@@ -124,4 +126,88 @@ def _run(ref: str, data: dict):
                 if attempt < HTTP_RETRIES:
                     time.sleep(0.5 * (attempt + 1))
         raise RuntimeError(f"فراخوانی سرویس ناموفق بود: {last_err}")
+    if kind == "soap":
+        # فرمت: soap:URL|SOAPAction — جداکننده «|» تا با http:// در URL تداخل نکند (فاز ۵)
+        url, _, action = rest.partition("|")
+        if not url:
+            raise RuntimeError("آدرس سرویس SOAP مشخص نشده است")
+        return _run_soap(url, action, _sanitize(data))
     raise RuntimeError(f"نوع کانکتور «{kind}» پشتیبانی نمی‌شود")
+
+
+# ---------------- SOAP 1.1 (فاز ۵) ----------------
+SOAP_NS = "http://schemas.xmlsoap.org/soap/envelope/"
+SOAP_ARG_NS = "http://bpms.local/connector"
+
+
+def _xml_escape(v: str) -> str:
+    return (str(v).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+            .replace('"', "&quot;").replace("'", "&apos;"))
+
+
+def _soap_args(data: dict) -> str:
+    """پارامترهای ساده به‌صورت عنصر؛ مقدار پیچیده JSON می‌شود — سقف ۵۰ پارامتر."""
+    import json as _json
+    parts = []
+    for k, v in list((data or {}).items())[:50]:
+        if not k or k.startswith("_"):
+            continue
+        tag = _xml_escape(re.sub(r"[^A-Za-z0-9_.-]", "_", str(k))[:60])
+        val = v if isinstance(v, (str, int, float, bool)) else _json.dumps(v, ensure_ascii=False, default=str)
+        parts.append(f"  <arg name=\"{tag}\">{_xml_escape(val)}</arg>")
+    return "\n".join(parts)
+
+
+def _build_envelope(data: dict) -> str:
+    return ("<?xml version=\"1.0\" encoding=\"utf-8\"?>"
+            f'<soapenv:Envelope xmlns:soapenv="{SOAP_NS}" xmlns:bpms="{SOAP_ARG_NS}">'
+            "<soapenv:Header/><soapenv:Body>"
+            '<bpms:execute>'
+            f"{_soap_args(data)}"
+            "</bpms:execute>"
+            "</soapenv:Body></soapenv:Envelope>")
+
+
+def _run_soap(url: str, action: str, data: dict):
+    envelope = _build_envelope(data)
+    headers = {"Content-Type": "text/xml; charset=utf-8", "SOAPAction": f'"{action or ""}"'}
+    last_err = None
+    for attempt in range(HTTP_RETRIES + 1):
+        try:
+            with httpx.Client(timeout=HTTP_TIMEOUT, verify=True) as client:
+                resp = client.post(url, content=envelope.encode("utf-8"), headers=headers)
+            if resp.status_code >= 400:
+                raise RuntimeError(f"پاسخ {resp.status_code} از سرویس SOAP")
+            return _parse_soap_response(resp.text)
+        except RuntimeError:
+            raise
+        except Exception as e:  # noqa: BLE001
+            last_err = e
+            if attempt < HTTP_RETRIES:
+                time.sleep(0.5 * (attempt + 1))
+    raise RuntimeError(f"فراخوانی SOAP ناموفق بود: {last_err}")
+
+
+def _parse_soap_response(text: str) -> dict:
+    """استخراج بدنه پاسخ؛ Fault → خطا؛ عناصر ساده بدنه به dict تبدیل می‌شود."""
+    from lxml import etree
+    try:
+        root = etree.fromstring(text.encode("utf-8") if isinstance(text, str) else text)
+    except etree.XMLSyntaxError as e:
+        raise RuntimeError(f"پاسخ SOAP نامعتبر است: {e}")
+    fault = root.find(f".//{{{SOAP_NS}}}Fault")
+    if fault is not None:
+        msg = fault.findtext(f".//{{{SOAP_NS}}}faultstring") or "خطای SOAP"
+        raise RuntimeError(f"SOAP Fault: {msg[:300]}")
+    body = root.find(f"{{{SOAP_NS}}}Body")
+    out: dict = {}
+    if body is not None:
+        for el in body.iter():
+            if not isinstance(el.tag, str):
+                continue
+            if el.tag.endswith("}Result"):
+                out["result"] = el.text
+                break
+    if not out:
+        out = {"response_text": (text or "")[:1000]}
+    return out

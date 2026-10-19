@@ -58,6 +58,30 @@ locust -f scripts/load/locustfile.py --headless -u 200 -r 10 -t 10m --host http:
 
 فایل خام: `scripts/load/results-sample-stats.csv` (ستون‌های صدک در انتهای CSV).
 
+## نتیجه عملیاتی (فاز ۵ — PostgreSQL ۱۶، ۵۰ کاربر، ۲ دقیقه)
+
+```bash
+# پس از تنظیم BPMS_DATABASE_URL به PostgreSQL
+alembic upgrade head && python -m app.seed
+BPMS_DATABASE_URL=... uvicorn app.main:app --port 8000
+locust -f scripts/load/locustfile.py --headless -u 50 -r 5 -t 2m --host http://localhost:8000 \
+    --csv load_pg --only-summary
+```
+
+مجموع **۳٬۳۹۸ درخواست (~۲۸ req/s)، نرخ خطای ۰٫۱۵٪** — تنها ۵ مورد 409 رقابت Claim
+(رفتار صحیح AC-12، نه خطا). Aggregated: میانه ۱۱ms، **p95 = ۴۸ms**، p99 = ۱۹۰ms.
+
+| مسیر | تعداد | p50 | p95 |
+|------|-------|-----|-----|
+| POST /process-instances (شروع فرایند) | ۲۵۸ | ۱۹ms | ۵۴ms |
+| POST /tasks/{id}/complete | ۲۵۸ | ۲۲ms | ۶۸ms |
+| POST /tasks/{id}/complete (تأیید مدیر) | ۱۷۷ | ۲۴ms | ۴۹ms |
+| GET /tasks/inbox | ۶۴۷ | ۷ms | ۲۰ms |
+| POST /auth/login | ۵۰ | ۲۰۰ms | ۲۸۰ms |
+
+فایل خام: `scripts/load/results-pg-stats.csv`. همه SLOها با فاصله زیاد برقرارند؛
+PostgreSQL هم‌زمانی نوشتن را به‌روشنی بهتر از SQLite جذب کرد.
+
 ## چک‌لیست پیش از آزمون عملیاتی
 
 - [ ] PostgreSQL با connection pool مناسب و `synchronous_commit` بررسی‌شده

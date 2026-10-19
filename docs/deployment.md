@@ -125,3 +125,41 @@ location /api/v1/events/stream {
 2. **مجموعه E2E مرورگری** — `cd frontend && npm run e2e` روی محیطی که با مهاجرت‌های
    Alembic ساخته شده تا سازگاری اسکیمای عملیات هم پوشش داده شود (Playwright دیتابیس
    یکبارمصرف خودش را می‌سازد؛ برای اجرا روی محیط موجود `reuseExistingServer` را فعال کنید).
+
+
+## فاز ۵ — یکپارچه‌سازی: متغیرهای محیطی جدید و API بیرونی
+
+### متغیرهای محیطی (پیشوند `BPMS_`)
+
+```bash
+# ورود سازمانی OIDC (همه موارد برای فعال شدن لازم است)
+BPMS_OIDC_ENABLED=true
+BPMS_OIDC_ISSUER=https://sso.example.com/realms/bpms
+BPMS_OIDC_CLIENT_ID=bpms
+BPMS_OIDC_CLIENT_SECRET=...
+BPMS_OIDC_REDIRECT_URI=https://bpms.example.com/api/v1/auth/oidc/callback
+BPMS_OIDC_DEFAULT_ROLE=operator
+
+# احراز هویت LDAP
+BPMS_LDAP_ENABLED=true
+BPMS_LDAP_URL=ldap://dc.example.local:389
+BPMS_LDAP_BIND_DN=CN=svc-bpms,OU=Service,DC=example,DC=local
+BPMS_LDAP_BIND_PASSWORD=...
+BPMS_LDAP_USER_BASE=OU=Users,DC=example,DC=local
+BPMS_LDAP_USER_FILTER=(&(objectClass=user)(sAMAccountName={username}))
+```
+
+### API بیرونی برای سرویس‌های دیگر سازمان
+
+1. در رابط کاربری (با مجوز `integration.manage`) از بخش یکپارچه‌سازی، کلید سرویس بسازید —
+   رمز فقط یک‌بار نمایش داده می‌شود (چرخش: `POST /integrations/clients/{id}/rotate-secret`).
+2. سرویس بیرونی با هدر `X-API-Key` (+ `X-Timestamp` و `X-Signature` در صورت require_signature)
+   و `Idempotency-Key` برای عملیات نوشتاری فراخوانی می‌کند — قرارداد کامل در docs/phase5.md.
+3. برای اطلاع‌رسانی رویدادها به سیستم‌های دیگر، مقصد Webhook ثبت کنید و امضای
+   `X-BPMS-Signature` را در مقصد اعتبارسنجی کنید.
+
+### ملاحظات nginx برای API بیرونی
+
+اگر سقف نرخ سرویس‌های بیرونی مهم است، علاوه بر rate limit داخلی (per-process)،
+`limit_req` در nginx برای مسیر `/api/v1/external/` اضافه کنید تا در استقرار
+چندنمونه‌ای سقف سراسری تضمین شود.

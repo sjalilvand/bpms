@@ -16,3 +16,7 @@ from app.modules.notifications import service  # noqa
 
 # ثبت شنونده‌های رویداد زنده (SSE فاز ۳)
 from app.modules.events import listeners  # noqa
+
+# فاز ۵: مدل‌های API بیرونی + شنونده Webhook
+from app.modules.external import models  # noqa
+from app.modules.external import webhooks  # noqa

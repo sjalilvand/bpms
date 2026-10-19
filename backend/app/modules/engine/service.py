@@ -23,6 +23,7 @@ from app.modules.forms.models import FormVersion, FormSubmission
 from app.modules.forms.validator import validate_form_data
 from app.modules.notifications.service import notify_user, notify_role
 from app.modules.events.listeners import queue_event
+from app.modules.external.webhooks import queue_webhook
 from app.modules.audit.service import log_action
 
 
@@ -153,6 +154,9 @@ def start_instance(db: Session, version: ProcessVersion, user: User, *,
     db.flush()
     add_event(db, inst.id, "instance_started", actor_id=user.id,
               detail={"version": version.version, "process": definition.key})
+    queue_webhook(db, "instance.started", {"instance_id": inst.id, "process": definition.key,
+                                           "title": inst.title, "business_key": inst.business_key,
+                                           "started_by": user.username})
     _sync_tasks(db, inst, wf)
     db.commit()
     log_action(db, user.id, "instance.started", "instance", inst.id, {"process": definition.key})
@@ -190,6 +194,9 @@ def _sync_tasks(db: Session, instance: ProcessInstance, wf) -> None:
         db.add(row)
         db.flush()
         add_event(db, instance.id, "task_created", task_id=row.id, spec_id=spec.name, task_name=row.name)
+        queue_webhook(db, "task.created", {"instance_id": instance.id, "task_id": row.id,
+                                           "task": row.name, "spec_id": spec.name,
+                                           "candidate_role": candidate_role, "assignee_id": assignee_id})
         if assignee_id:
             notify_user(db, assignee_id, "وظیفه جدید", f"«{row.name}» در فرایند «{instance.title}» به شما تخصیص یافت",
                         link=f"/inbox?task={row.id}")
@@ -224,6 +231,8 @@ def _check_completed(db: Session, instance: ProcessInstance, wf, actor_id=None):
         instance.status = "completed"
         instance.finished_at = now()
         add_event(db, instance.id, "instance_completed", actor_id=actor_id)
+        queue_webhook(db, "instance.completed", {"instance_id": instance.id,
+                                                 "finished_at": instance.finished_at.isoformat() if instance.finished_at else None})
 
 
 def _check_incidents(db: Session, instance: ProcessInstance, wf) -> None:
@@ -309,6 +318,10 @@ def complete_task(db: Session, task: EngineTask, user: User, *, data: dict | Non
     # رویداد زنده برای ناظران نمونه (SSE فاز ۳)
     queue_event(db, [instance.started_by_id, user.id], "instance",
                 {"instance_id": instance.id, "reason": "task_completed", "task": task.name})
+    # فاز ۵: Webhook خروجی
+    queue_webhook(db, "task.completed", {"instance_id": instance.id, "task_id": task.id,
+                                         "task": task.name, "result": result,
+                                         "completed_by": user.username})
     db.commit()
     log_action(db, user.id, "task.completed", "task", task.id, {"instance": instance.id, "result": result})
     return task
@@ -362,6 +375,8 @@ def cancel_instance(db: Session, instance: ProcessInstance, user: User, reason: 
     instance.finished_at = now()
     instance.engine_state = adapter.serialize_workflow(wf)
     add_event(db, instance.id, "instance_cancelled", actor_id=user.id, comment=reason)
+    queue_webhook(db, "instance.cancelled", {"instance_id": instance.id, "reason": reason,
+                                             "cancelled_by": user.username})
     db.commit()
     log_action(db, user.id, "instance.cancelled", "instance", instance.id, {"reason": reason})
 
