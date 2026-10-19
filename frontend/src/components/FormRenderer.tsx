@@ -46,6 +46,8 @@ export default function FormRenderer({
   const [users, setUsers] = useState<{ id: number; full_name: string }[]>([]);
   const [orgTree, setOrgTree] = useState<any[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  // تیک همگام‌سازی ذخیره فرم — زیرفرم‌ها مقدار را برنامه‌ای می‌نویسند و useWatch آن‌ها را نمی‌بیند
+  const [storeTick, setStoreTick] = useState(0);
 
   useEffect(() => {
     if (initialValues) form.setFieldsValue(initialValues);
@@ -72,7 +74,11 @@ export default function FormRenderer({
     if (needsOrg) api.get('/org-units').then((r) => setOrgTree(r.data.items)).catch(() => {});
   }, [JSON.stringify(schema)]);
 
-  const values = Form.useWatch([], form) || {};
+  const watched = Form.useWatch([], form);
+  // ادغام مقادیر watch شده با ذخیره کامل — منبع حقیقت برای فرمول‌ها
+  const values = useMemo(() => ({ ...(watched || {}), ...(form.getFieldsValue(true) || {}) }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [JSON.stringify(watched || {}), storeTick]);
 
   // محاسبه فرمول‌ها برای نمایش زنده
   const computed = useMemo(() => {
@@ -84,7 +90,7 @@ export default function FormRenderer({
       }
     });
     return out;
-  }, [JSON.stringify(values), JSON.stringify(schema)]);
+  }, [values, JSON.stringify(schema)]);
 
   const visible = (f: FormField) => !f.visibleIf || evaluateVisible(f.visibleIf, values);
 
@@ -115,10 +121,11 @@ export default function FormRenderer({
     const data = validateAll();
     if (!data) return;
     const cleaned = { ...data };
+    // محاسبه نهایی فرمول‌ها روی ذخیره کامل (شامل زیرفرم‌ها) — نه مقادیر watch شده
     for (const f of schema.fields || []) {
       if (f.type === 'national_id' && cleaned[f.key]) cleaned[f.key] = normalizeNationalId(String(cleaned[f.key]));
       if (f.type === 'mobile' && cleaned[f.key]) cleaned[f.key] = normalizeMobile(String(cleaned[f.key]));
-      if (f.type === 'calculated') cleaned[f.key] = computed[f.key];
+      if (f.type === 'calculated') cleaned[f.key] = computeFormula(f.formula || '', { ...data });
     }
     onFinish?.(cleaned, result);
   };
@@ -237,6 +244,7 @@ export default function FormRenderer({
           <Col key={f.key} span={24}>
             <SubformField
               field={f} readOnly={isReadOnly} values={values}
+              onSync={() => setStoreTick((t) => t + 1)}
               onSchemasLoaded={(id, s) => { subSchemaCache[id] = s; }}
             />
           </Col>
@@ -245,6 +253,7 @@ export default function FormRenderer({
         return (
           <Col key={f.key} span={24}>
             <SubformSingle field={f} readOnly={isReadOnly}
+              onSync={() => setStoreTick((t) => t + 1)}
               onSchemasLoaded={(id, s) => { subSchemaCache[id] = s; }} />
           </Col>
         );
@@ -366,10 +375,11 @@ interface SubformProps {
   field: FormField;
   readOnly?: boolean;
   values?: Record<string, unknown>;
+  onSync?: () => void;
   onSchemasLoaded?: (id: number, s: FormSchema) => void;
 }
 
-function SubformField({ field, readOnly }: SubformProps) {
+function SubformField({ field, readOnly, onSync }: SubformProps) {
   const form = Form.useFormInstance();
   const [schema, setSchema] = useState<FormSchema | null>(null);
   const [rows, setRows] = useState<Record<string, unknown>[]>(() => {
@@ -379,6 +389,8 @@ function SubformField({ field, readOnly }: SubformProps) {
 
   useEffect(() => {
     form.setFieldValue(field.key, rows);
+    onSync?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows]);
 
   useEffect(() => {
@@ -424,6 +436,7 @@ function SubformField({ field, readOnly }: SubformProps) {
                       <Text strong>{sf.moneyUnit ? formatMoney(calcVal as number) : String(calcVal ?? '—')}</Text>
                     ) : sf.type === 'integer' || sf.type === 'number' || sf.type === 'money' ? (
                       <InputNumber
+                        data-testid={`sub-${field.key}-${sf.key}-${idx}`}
                         style={{ width: '100%' }} min={sf.min} max={sf.max} disabled={readOnly}
                         value={(row[sf.key] as number) ?? undefined}
                         formatter={(v) => (sf.type === 'money' ? `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',') : `${v}`)}
@@ -432,6 +445,7 @@ function SubformField({ field, readOnly }: SubformProps) {
                       />
                     ) : (
                       <Input
+                        data-testid={`sub-${field.key}-${sf.key}-${idx}`}
                         disabled={readOnly} maxLength={sf.maxLength}
                         value={(row[sf.key] as string) ?? ''}
                         onChange={(e) => updateRow(idx, sf.key, e.target.value)}
@@ -453,7 +467,7 @@ function SubformField({ field, readOnly }: SubformProps) {
 }
 
 // ---------- زیرفرم تک‌نمونه‌ای ----------
-function SubformSingle({ field, readOnly }: SubformProps) {
+function SubformSingle({ field, readOnly, onSync }: SubformProps) {
   const form = Form.useFormInstance();
   const [schema, setSchema] = useState<FormSchema | null>(null);
   const [obj, setObj] = useState<Record<string, unknown>>(() => {
@@ -463,6 +477,8 @@ function SubformSingle({ field, readOnly }: SubformProps) {
 
   useEffect(() => {
     form.setFieldValue(field.key, obj);
+    onSync?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [obj]);
 
   useEffect(() => {

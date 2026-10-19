@@ -22,4 +22,8 @@ export default defineConfig({
     outDir: 'dist',
     chunkSizeWarningLimit: 1600,
   },
+  // فاز ۴: آزمون‌های Playwright در e2e/ با اجراکننده خودشان اجرا می‌شوند
+  test: {
+    exclude: ['**/node_modules/**', 'e2e/**', 'test-results/**'],
+  },
 });

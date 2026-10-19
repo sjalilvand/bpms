@@ -62,8 +62,11 @@ def _accessible_assignee_ids(db: Session, user: User) -> list[int]:
 @router.get("/tasks/inbox")
 def inbox(db: Session = Depends(get_db), user: User = Depends(get_current_user),
           page: int = 1, page_size: int = 20, status: str = "open", q: str = ""):
-    """وظایف تخصیص‌یافته به من (و جانشین‌شده‌ها)."""
+    """وظایف تخصیص‌یافته به من (و جانشین‌شده‌ها) + وظایف دریافت‌شده از صف گروهی."""
     where = EngineTask.assignee_id.in_(_accessible_assignee_ids(db, user))
+    # وظایف Claim شده توسط من (assignee ندارند ولی claimed_by_id دارند) — وگرنه از کارتابل گم می‌شوند
+    where = or_(where, and_(EngineTask.claimed_by_id == user.id,
+                            EngineTask.status == "claimed"))
     if status == "open":
         where = and_(where, EngineTask.status.in_(["ready", "claimed"]))
     elif status != "all":

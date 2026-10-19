@@ -15,7 +15,8 @@ interface Props {
 // سازگار با antd Form.Item (value/onChange)
 export default function JalaliDatePicker({ value, onChange, disabled, placeholder }: Props) {
   return (
-    <DatePicker_
+    <span data-testid="jalali-datepicker" style={{ display: 'block' }}>
+      <DatePicker_
       calendar={persian}
       locale={persian_fa}
       value={value ? value : ''}
@@ -30,5 +31,6 @@ export default function JalaliDatePicker({ value, onChange, disabled, placeholde
       style={{ width: '100%', fontFamily: "'Vazirmatn', sans-serif", height: 32, borderRadius: 8, border: '1px solid #d9d9d9', padding: '0 11px' }}
       calendarPosition="bottom-right"
     />
+    </span>
   );
 }

@@ -21,6 +21,7 @@ from app.modules.attachments.router import router as attachments_router
 from app.modules.notifications.router import router as notifications_router
 from app.modules.decisions.router import router as decisions_router
 from app.modules.calendars.router import router as calendars_router
+from app.modules.conditions.router import router as conditions_router
 from app.modules.events.router import router as events_router
 
 app = FastAPI(
@@ -65,6 +66,7 @@ app.include_router(attachments_router, prefix=api, tags=["attachments"])
 app.include_router(notifications_router, prefix=api, tags=["notifications"])
 app.include_router(decisions_router, prefix=api, tags=["decisions"])
 app.include_router(calendars_router, prefix=api, tags=["calendars"])
+app.include_router(conditions_router, prefix=api, tags=["conditions"])
 app.include_router(events_router, prefix=api, tags=["events"])
 
 

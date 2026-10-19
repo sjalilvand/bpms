@@ -173,6 +173,54 @@ def validate_version(vid: int, db: Session = Depends(get_db), user: User = Depen
     return _validate(db, v)
 
 
+def _known_variables(db: Session, v: ProcessVersion) -> set[str] | None:
+    """متغیرهای شناخته‌شده برای هشدار شرط مسیر (فاز ۴): فیلدهای فرم‌های متصل + خروجی DMN + متغیرهای سیستمی.
+
+    اگر نسخه هیچ فرم/جدول تصمیم متصلی نداشته باشد None بازمی‌گردد (هشدار متغیر بی‌معناست).
+    """
+    bindings = (v.config_json or {}).get("bindings", {}) or {}
+    vars_: set[str] = {"action", "business_key"}
+    found_any = False
+    form_ids: set[int] = set()
+
+    def fields_of_form(fid: int) -> None:
+        nonlocal found_any
+        found_any = True
+        if fid in form_ids:
+            return
+        form_ids.add(fid)
+        fv = db.scalar(select(FormVersion).where(
+            FormVersion.form_id == fid, FormVersion.status == "published").order_by(FormVersion.version.desc()))
+        if not fv:
+            return
+        for f in (fv.schema_json or {}).get("fields", []):
+            if f.get("key"):
+                vars_.add(f["key"])
+            if f.get("type") == "subform" and f.get("subformId"):
+                sfv = db.scalar(select(FormVersion).where(
+                    FormVersion.form_id == f["subformId"], FormVersion.status == "published").order_by(FormVersion.version.desc()))
+                for sf in (sfv.schema_json or {}).get("fields", []) if sfv else []:
+                    if sf.get("key"):
+                        vars_.add(sf["key"])
+
+    for b in bindings.values():
+        if not isinstance(b, dict):
+            continue
+        fid = b.get("formDefinitionId")
+        if fid:
+            fields_of_form(int(fid))
+        dkey = b.get("decisionKey")
+        if dkey:
+            found_any = True
+            from app.modules.decisions.models import DecisionDefinition
+            dd = db.scalar(select(DecisionDefinition).where(DecisionDefinition.key == dkey))
+            if dd and dd.latest_published:
+                for o in (dd.latest_published.schema_json or {}).get("outputs", []):
+                    if o.get("name"):
+                        vars_.add(o["name"])
+    return vars_ if found_any else None
+
+
 def _validate(db: Session, v: ProcessVersion) -> dict:
     errors, warnings = [], []
     # ۱) ساختار XML و پارس موتور
@@ -232,13 +280,38 @@ def _validate(db: Session, v: ProcessVersion) -> dict:
         from app.modules.calendars.models import WorkCalendar
         if not db.get(WorkCalendar, int(cal_id)):
             errors.append("تقویم کاری متصل به نسخه یافت نشد")
-    # ۵) شناسه‌های تکراری در XML
+    # ۵) شرط‌های مسیر — نحو معتبر و متغیرهای شناخته‌شده (فاز ۴: شرط‌ساز بصری)
+    from app.modules.conditions import parser as cond_parser
+    from lxml import etree as _etree
+    BPMN_NS = "http://www.omg.org/spec/BPMN/20100524/MODEL"
+    known_vars = _known_variables(db, v)
+    try:
+        root = _etree.fromstring(v.bpmn_xml.encode("utf-8"))
+        for flow in root.iter(f"{{{BPMN_NS}}}sequenceFlow"):
+            cond_el = flow.find(f"{{{BPMN_NS}}}conditionExpression")
+            if cond_el is None or not (cond_el.text or "").strip():
+                continue
+            fid, fname = flow.get("id") or "?", flow.get("name") or ""
+            label = f"{fid}" + (f" («{fname}»)" if fname else "")
+            try:
+                cond_parser.parse(cond_el.text)
+            except cond_parser.ConditionError as e:
+                errors.append(f"شرط مسیر {label}: {e}")
+                continue
+            for var in cond_parser.extract_variables(cond_el.text):
+                if var.startswith("_"):
+                    continue
+                if known_vars is not None and var not in known_vars and var.split(".")[0] not in known_vars:
+                    warnings.append(f"شرط مسیر {label}: متغیر «{var}» در فرم‌های متصل شناخته نشده است")
+    except _etree.XMLSyntaxError:
+        pass  # خطای XML قبلاً گزارش شده است
+    # ۶) شناسه‌های تکراری در XML
     import re as _re
     ids = _re.findall(r'id="([^"]+)"', v.bpmn_xml)
     dupes = {i for i in ids if ids.count(i) > 1}
     if dupes:
         errors.append(f"شناسه‌های تکراری در مدل: {', '.join(sorted(dupes)[:5])}")
-    # ۶) عنصر اجرایی پشتیبانی‌نشده
+    # ۷) عنصر اجرایی پشتیبانی‌نشده
     unsupported = {"CallActivity"}  # محدودیت‌های موتور در docs/bpmn-coverage.md
     try:
         root_cls = {ts.__class__.__name__ for ts in spec.task_specs.values()}

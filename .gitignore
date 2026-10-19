@@ -22,3 +22,8 @@ frontend/dist/
 *.log
 .idea/
 .vscode/
+
+# فاز ۴ — E2E و آزمون بار
+backend/data/e2e.db*
+frontend/test-results/
+frontend/playwright-report/

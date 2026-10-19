@@ -1,4 +1,4 @@
-// طراح فرایند BPMN — bpmn-js + تنظیم فعالیت‌ها (فرم/مسئول/نتیجه/کانکتور) + اعتبارسنجی + انتشار
+// طراح فرایند BPMN — bpmn-js + تنظیم فعالیت‌ها (فرم/مسئول/نتیجه/کانکتور) + شرط‌ساز بصری جریان‌ها + اعتبارسنجی + انتشار
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert, Button, Card, Col, Drawer, Empty, Form, Input, InputNumber, Modal, Row, Select,
@@ -6,12 +6,14 @@ import {
 } from 'antd';
 import {
   DownloadOutlined, FileAddOutlined, SaveOutlined, ThunderboltOutlined,
-  UploadOutlined, SettingOutlined,
+  UploadOutlined, SettingOutlined, FilterOutlined, DeleteOutlined, PlayCircleOutlined,
 } from '@ant-design/icons';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { api, TaskBinding, VersionRow, extractError } from '../api/client';
 import FormDesigner from '../components/FormDesigner';
+import ConditionBuilder from '../components/ConditionBuilder';
 import type { FormSchema } from '../lib/formSchema';
+import { CondGroup, emptyCondition, isGatewayFlow, parseCondition, renderCondition } from '../lib/conditions';
 
 export default function ProcessDesignerPage() {
   const { id } = useParams();
@@ -25,7 +27,16 @@ export default function ProcessDesignerPage() {
   const [version, setVersion] = useState<VersionRow | null>(null);
   const [xml, setXml] = useState('');
   const [bindings, setBindings] = useState<Record<string, TaskBinding>>({});
-  const [selectedEl, setSelectedEl] = useState<{ id: string; name: string; type: string } | null>(null);
+  const [selectedEl, setSelectedEl] = useState<{ id: string; name: string; type: string; sourceType?: string } | null>(null);
+  const selElRef = useRef<any>(null);
+  // شرط‌ساز بصری (فاز ۴)
+  const [condGroup, setCondGroup] = useState<CondGroup | null>(null);
+  const [condMode, setCondMode] = useState<'none' | 'visual' | 'manual'>('none');
+  const [condManual, setCondManual] = useState('');
+  const [hasCondition, setHasCondition] = useState(false);
+  const [condVarOptions, setCondVarOptions] = useState<string[]>(['action', 'business_key']);
+  const [condSample, setCondSample] = useState('{"action": "approve"}');
+  const [condEval, setCondEval] = useState<{ ok: boolean; result?: boolean; msg: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [validation, setValidation] = useState<{ errors: string[]; warnings: string[] } | null>(null);
   const [procs, setProcs] = useState<{ id: string; name: string }[]>([]);
@@ -64,20 +75,90 @@ export default function ProcessDesignerPage() {
     api.get('/calendars').then((r) => setCalendarsList(r.data.items)).catch(() => {});
   }, []);
 
-  // انتخاب عنصر روی نمودار
+  // انتخاب عنصر روی نمودار — از طریق ModelerHost (بدون رقابت ثبت شنونده)
+  const handleSelect = useCallback((element: any) => {
+    if (!element || ['bpmn:Process', 'bpmn:Collaboration'].includes(element.type)) { setSelectedEl(null); return; }
+    selElRef.current = element;
+    setSelectedEl({
+      id: element.id, name: element.businessObject?.name || element.id, type: element.type,
+      sourceType: element.source?.type || element.businessObject?.sourceRef?.$type,
+    });
+    setCondEval(null);
+  }, []);
+
+  // بارگذاری شرط جریان انتخاب‌شده در شرط‌ساز (فاز ۴)
   useEffect(() => {
-    const m = modelerRef.current;
-    if (!m) return;
-    const onSel = ({ element }: any) => {
-      if (!element || ['bpmn:Process', 'bpmn:Collaboration'].includes(element.type)) { setSelectedEl(null); return; }
-      setSelectedEl({ id: element.id, name: element.businessObject?.name || element.id, type: element.type });
-    };
-    m.on('selection.changed', onSel);
-    return () => { m.off('selection.changed', onSel); };
-  }, [xml, versionId]);
+    const el = selElRef.current;
+    setCondEval(null);
+    if (!selectedEl || selectedEl.type !== 'bpmn:SequenceFlow' || !isGatewayFlow(selectedEl.sourceType)) {
+      setCondMode('none'); setCondGroup(null); return;
+    }
+    const body: string = el?.businessObject?.conditionExpression?.body || '';
+    setHasCondition(!!body.trim());
+    setCondManual(body);
+    if (!body.trim()) {
+      setCondGroup(emptyCondition()); setCondMode('visual'); return;
+    }
+    const r = parseCondition(body);
+    if (r.structure) { setCondGroup(r.structure); setCondMode('visual'); }
+    else { setCondGroup(null); setCondMode('manual'); }
+    // پیشنهاد متغیرها از فرم‌های متصل
+    loadVarSuggestions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedEl?.id, selectedEl?.type, xml]);
+
+  const loadVarSuggestions = useCallback(async () => {
+    try {
+      const fids = new Set<number>();
+      Object.values(bindings || {}).forEach((b: any) => { if (b?.formDefinitionId) fids.add(Number(b.formDefinitionId)); });
+      const keys = new Set<string>(['action', 'business_key']);
+      await Promise.all([...fids].map(async (fid) => {
+        try {
+          const r = await api.get(`/forms/versions/published-by-form/${fid}`);
+          (r.data.schema_json?.fields || []).forEach((f: any) => { if (f.key) keys.add(f.key); });
+        } catch { /* فرم منتشرشده ندارد */ }
+      }));
+      setCondVarOptions([...keys]);
+    } catch { /* پیشنهاد ساده */ }
+  }, [bindings]);
+
+  const applyConditionExpr = async (expr: string) => {
+    const el = selElRef.current; const m = modelerRef.current;
+    if (!el || !m) return;
+    const modeling = m.get('modeling');
+    const moddle = m.get('moddle');
+    const cond = moddle.create('bpmn:FormalExpression', { body: expr });
+    modeling.updateProperties(el, { conditionExpression: cond });
+    setHasCondition(true);
+    setCondManual(expr);
+    message.success('شرط مسیر اعمال شد — برای ماندگاری، نسخه را ذخیره کنید');
+  };
+
+  const removeCondition = () => {
+    const el = selElRef.current; const m = modelerRef.current;
+    if (!el || !m) return;
+    m.get('modeling').updateProperties(el, { conditionExpression: undefined });
+    setHasCondition(false);
+    setCondGroup(emptyCondition());
+    setCondMode('visual');
+    setCondManual('');
+    message.success('شرط مسیر حذف شد');
+  };
+
+  const evalCondition = async (expr: string) => {
+    let data: Record<string, unknown> = {};
+    try { data = JSON.parse(condSample || '{}'); } catch { setCondEval({ ok: false, msg: 'داده نمونه JSON معتبر نیست' }); return; }
+    try {
+      const r = await api.post('/conditions/evaluate', { expression: expr, data });
+      if (r.data.ok) setCondEval({ ok: true, result: r.data.result, msg: r.data.result ? 'شرط برقرار است (درست)' : 'شرط برقرار نیست (نادرست)' });
+      else setCondEval({ ok: false, msg: r.data.errors?.join(' | ') || 'ارزیابی ممکن نشد' });
+    } catch (e) { setCondEval({ ok: false, msg: extractError(e) }); }
+  };
 
   const onModelerReady = useCallback((m: any) => {
     modelerRef.current = m;
+    // دسترسی آزمون‌های E2E و اشکال‌زدایی به رجیستری عناصر نمودار
+    (window as any).__bpms_modeler = m;
   }, []);
 
   const getXml = async (): Promise<string> => {
@@ -177,7 +258,13 @@ export default function ProcessDesignerPage() {
   const isUserTask = selectedEl?.type === 'bpmn:UserTask';
   const isServiceTask = selectedEl?.type === 'bpmn:ServiceTask';
   const isStart = selectedEl?.type === 'bpmn:StartEvent';
+  const isSeqFlow = selectedEl?.type === 'bpmn:SequenceFlow';
+  const condCapable = isSeqFlow && isGatewayFlow(selectedEl?.sourceType);
   const configurable = isUserTask || isServiceTask || isStart;
+  const condExprPreview = (() => {
+    try { return condMode === 'visual' && condGroup ? renderCondition(condGroup) : condManual; }
+    catch (e) { return (e as Error).message; }
+  })();
 
   // حالت طراحی زیرفرم فرم متصل
   if (subformEdit) {
@@ -243,7 +330,7 @@ export default function ProcessDesignerPage() {
       {xml && (
         <Row gutter={12}>
           <Col span={18}>
-            <ModelerHost xml={xml} onReady={onModelerReady} onParsed={(p) => { setProcs(p); if (!mainPid && p.length) setMainPid((p.find((x: any) => x.isExecutable) || p[0]).id); }} />
+            <ModelerHost xml={xml} onReady={onModelerReady} onSelect={handleSelect} onParsed={(p) => { setProcs(p); if (!mainPid && p.length) setMainPid((p.find((x: any) => x.isExecutable) || p[0]).id); }} />
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
               برای تنظیم فرم/مسئول/نتیجه، فعالیت موردنظر را روی نمودار انتخاب کنید تا پنل تنظیمات باز شود.
             </Typography.Text>
@@ -251,8 +338,70 @@ export default function ProcessDesignerPage() {
           <Col span={6}>
             <Card size="small" title={<span><SettingOutlined /> تنظیمات فعالیت انتخابی</span>} styles={{ body: { minHeight: 300 } }}>
               {!selectedEl && <Alert type="info" message="ابتدا یک عنصر را روی نمودار انتخاب کنید" />}
-              {selectedEl && !configurable && (
+              {selectedEl && !configurable && !condCapable && (
                 <Alert type="info" message={`عنصر «${selectedEl.name}» (${selectedEl.type}) تنظیم خاصی ندارد`} />
+              )}
+              {selectedEl && isSeqFlow && !condCapable && (
+                <Alert type="info" message="شرط فقط روی جریان‌های خروجی از دروازه انحصاری/فراگیر اعمال می‌شود" />
+              )}
+              {selectedEl && condCapable && (
+                <div data-testid="condition-section">
+                  <Divider style={{ margin: '4px 0 10px' }} />
+                  <Space direction="vertical" style={{ width: '100%' }} size={6}>
+                    <Space wrap>
+                      <FilterOutlined />
+                      <Typography.Text strong>شرط مسیر (شرط‌ساز بصری)</Typography.Text>
+                      {hasCondition && <Tag color="blue">شرط تعریف‌شده</Tag>}
+                    </Space>
+                    <Typography.Text type="secondary" style={{ fontSize: 11 }}>
+                      جریان «{selectedEl.name}» از دروازه شرطی خارج می‌شود — شرط پایتونی معادل تولید و روی مدل اعمال می‌شود.
+                    </Typography.Text>
+                    {condMode === 'visual' && condGroup && (
+                      <>
+                        <ConditionBuilder value={condGroup} varOptions={condVarOptions} onChange={setCondGroup} />
+                        <div>
+                          <Typography.Text type="secondary" style={{ fontSize: 11 }}>عبارت تولیدشده:</Typography.Text>
+                          <pre data-testid="cond-preview" className="mono" style={{ background: '#0f172a', color: '#e2e8f0', borderRadius: 6, padding: 8, fontSize: 11, whiteSpace: 'pre-wrap', direction: 'ltr', textAlign: 'left' }}>{condExprPreview}</pre>
+                        </div>
+                        <Space wrap size={6}>
+                          <Button size="small" type="primary" icon={<SettingOutlined />} data-testid="apply-condition"
+                            disabled={!condGroup.items.length}
+                            onClick={() => { try { applyConditionExpr(renderCondition(condGroup)); } catch (e) { message.error((e as Error).message); } }}>
+                            اعمال شرط روی جریان
+                          </Button>
+                          <Button size="small" icon={<PlayCircleOutlined />} onClick={() => evalCondition(condExprPreview)}>
+                            آزمایش شرط
+                          </Button>
+                          {hasCondition && (
+                            <Popconfirm title="حذف شرط این جریان؟" onConfirm={removeCondition} okText="حذف" cancelText="انصراف">
+                              <Button size="small" danger icon={<DeleteOutlined />}>حذف شرط</Button>
+                            </Popconfirm>
+                          )}
+                        </Space>
+                      </>
+                    )}
+                    {condMode === 'manual' && (
+                      <Alert type="warning" showIcon
+                        message="این عبارت در شرط‌ساز بصری پشتیبانی نمی‌شود — حالت دستی"
+                        description={
+                          <Space direction="vertical" style={{ width: '100%' }}>
+                            <Input.TextArea className="mono" rows={3} style={{ direction: 'ltr', textAlign: 'left' }}
+                              value={condManual} onChange={(e) => setCondManual(e.target.value)} />
+                            <Button size="small" type="primary" onClick={() => applyConditionExpr(condManual)}>اعمال عبارت دستی</Button>
+                          </Space>
+                        } />
+                    )}
+                    <Input.TextArea
+                      rows={2} value={condSample} onChange={(e) => setCondSample(e.target.value)}
+                      placeholder='داده نمونه JSON برای آزمایش شرط — مثال: {"action": "approve"}'
+                      style={{ direction: 'ltr', textAlign: 'left', fontSize: 11 }}
+                    />
+                    {condEval && (
+                      <Alert type={condEval.ok ? (condEval.result ? 'success' : 'warning') : 'error'}
+                        showIcon message={condEval.msg} />
+                    )}
+                  </Space>
+                </div>
               )}
               {selectedEl && configurable && (
                 <Form layout="vertical" size="small">
@@ -359,8 +508,10 @@ export default function ProcessDesignerPage() {
   );
 }
 
-// میزبان Modeler با لود XML — جدا برای مدیریت lifecycle
-function ModelerHost({ xml, onReady, onParsed }: { xml: string; onReady: (m: any) => void; onParsed: (p: any[]) => void }) {
+// میزبان Modeler با لود XML — جدا برای مدیریت lifecycle؛ شنونده انتخاب در همین‌جا ثبت می‌شود
+function ModelerHost({ xml, onReady, onSelect, onParsed }: {
+  xml: string; onReady: (m: any) => void; onSelect: (element: any) => void; onParsed: (p: any[]) => void;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const mRef = useRef<any>(null);
   const [ready, setReady] = useState(false);
@@ -371,9 +522,14 @@ function ModelerHost({ xml, onReady, onParsed }: { xml: string; onReady: (m: any
       const m = new Mod.default({ container: ref.current as HTMLElement, keyboard: { bindTo: document } });
       mRef.current = m;
       onReady(m);
+      // شنونده انتخاب روی همان نمونه زنده — بدون وابستگی به ترتیب mount والد
+      m.on('selection.changed', ({ newSelection }: any) => {
+        onSelect(newSelection && newSelection.length ? newSelection[0] : null);
+      });
       setReady(true);
     });
     return () => { mRef.current?.destroy(); mRef.current = null; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
