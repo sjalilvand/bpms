@@ -281,7 +281,7 @@ export default function ProcessDesignerPage() {
       title={`طراح فرایند: ${process?.title || ''} ${version ? `— نسخه v${version.version} (${version.status === 'draft' ? 'پیش‌نویس' : version.status === 'published' ? 'منتشرشده' : version.status})` : ''}`}
       extra={
         <Space wrap>
-          <Upload beforeUpload={(f) => uploadFile(f as unknown as File)} showUploadList={false} accept=".bpmn,.xml">
+          <Upload beforeUpload={(f: unknown) => uploadFile(f as unknown as File)} showUploadList={false} accept=".bpmn,.xml">
             <Button icon={<UploadOutlined />}>باز کردن فایل BPMN</Button>
           </Upload>
           <Button icon={<DownloadOutlined />} onClick={downloadXml}>BPMN</Button>

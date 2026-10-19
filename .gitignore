@@ -28,3 +28,7 @@ backend/data/e2e.db*
 frontend/test-results/
 frontend/playwright-report/
 backend/data/pgdata/
+
+# فاز ۷ — ابزارهای محلی
+frontend/bun.lock
+backend/data/test.db*

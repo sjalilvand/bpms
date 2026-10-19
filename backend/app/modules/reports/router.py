@@ -3,12 +3,13 @@
 
 - شاخص‌های کلی، گلوگاه‌ها، بار کاری و حجم روزانه با فیلتر بازه/فرایند/وضعیت
 - گزارش‌های ذخیره‌شده (ذخیره پیکربندی و اجرای دوباره)
+- فاز ۷ — خروجی Excel و PDF از همه مجموعه‌داده‌ها یا گزارش ذخیره‌شده
 """
 from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -17,10 +18,12 @@ from app.core.database import get_db
 from app.core.deps import get_current_user, require_perm
 from app.modules.identity.models import User
 from app.modules.audit.service import log_action
-from app.modules.reports import service
+from app.modules.reports import exporting, service
 from app.modules.reports.models import SavedReport
 
 router = APIRouter()
+
+_XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
 class SavedReportIn(BaseModel):
@@ -154,3 +157,83 @@ def run_saved(rid: int, db: Session = Depends(get_db),
         raise HTTPException(400, str(e))
     return {"report": _saved_out(r), "data": data,
             "ran_at": datetime.now(timezone.utc).isoformat()}
+
+
+# ---------- فاز ۷ — خروجی Excel / PDF ----------
+
+def _export_filters(days: int = 30, date_from: str = "", date_to: str = "",
+                    definition_id: int = 0, status: str = "") -> dict:
+    return dict(days=days, date_from=date_from or None, date_to=date_to or None,
+                definition_id=definition_id or None, status=status or None)
+
+
+def _file_response(content: bytes, media_type: str, filename: str) -> Response:
+    return Response(content, media_type=media_type, headers={
+        "Content-Disposition": f'attachment; filename="{filename}"',
+        "Content-Length": str(len(content)),
+    })
+
+
+def _export_name(fmt: str) -> str:
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M")
+    return f"bpms-report-{stamp}.{fmt}"
+
+
+@router.get("/reports/export/excel")
+def export_excel(days: int = 30, date_from: str = "", date_to: str = "",
+                 definition_id: int = 0, status: str = "",
+                 request: Request = None,
+                 db: Session = Depends(get_db),
+                 user: User = Depends(require_perm("report.view"))):
+    """خروجی Excel — کتاب‌کار چندبرگی از همه مجموعه‌داده‌ها با فیلترهای فعلی."""
+    try:
+        data = exporting.collect_report(db, **_export_filters(days, date_from, date_to, definition_id, status))
+        content = exporting.excel_bytes(data)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    log_action(db, user.id, "report.exported", "report", None,
+               {"format": "excel", "days": days, "definition_id": definition_id}, request)
+    db.commit()
+    return _file_response(content, _XLSX_MIME, _export_name("xlsx"))
+
+
+@router.get("/reports/export/pdf")
+def export_pdf(days: int = 30, date_from: str = "", date_to: str = "",
+               definition_id: int = 0, status: str = "",
+               request: Request = None,
+               db: Session = Depends(get_db),
+               user: User = Depends(require_perm("report.view"))):
+    """خروجی PDF فارسی (RTL) — سند کامل شاخص‌ها با فیلترهای فعلی."""
+    try:
+        data = exporting.collect_report(db, **_export_filters(days, date_from, date_to, definition_id, status))
+        content = exporting.pdf_bytes(data)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    log_action(db, user.id, "report.exported", "report", None,
+               {"format": "pdf", "days": days, "definition_id": definition_id}, request)
+    db.commit()
+    return _file_response(content, "application/pdf", _export_name("pdf"))
+
+
+@router.get("/reports/saved/{rid}/export")
+def export_saved(rid: int, format: str = Query(pattern="^(excel|pdf)$"),
+                 request: Request = None,
+                 db: Session = Depends(get_db),
+                 user: User = Depends(require_perm("report.view"))):
+    """خروجی Excel/PDF یک گزارش ذخیره‌شده (فقط مجموعه‌داده همان گزارش)."""
+    r = db.get(SavedReport, rid)
+    if not r:
+        raise HTTPException(404, "گزارش ذخیره‌شده یافت نشد")
+    f = r.definition or {}
+    try:
+        data = exporting.collect_report(
+            db, days=int(f.get("days") or 30), date_from=f.get("date_from"),
+            date_to=f.get("date_to"), definition_id=f.get("definition_id"),
+            status=f.get("status"), dataset=r.dataset)
+        if format == "excel":
+            content = exporting.excel_bytes(data, report_name=f"گزارش ذخیره‌شده: {r.name}")
+            return _file_response(content, _XLSX_MIME, f"bpms-saved-{rid}.xlsx")
+        content = exporting.pdf_bytes(data, report_name=f"گزارش ذخیره‌شده: {r.name}")
+        return _file_response(content, "application/pdf", f"bpms-saved-{rid}.pdf")
+    except ValueError as e:
+        raise HTTPException(400, str(e))

@@ -1,35 +1,6 @@
 // E2E — سناریوی §۳۵ سند از رابط کاربری: ثبت درخواست خرید، تأیید مدیر، اطلاع‌رسانی مالی، وضعیت نهایی
-import { test, expect, Page } from '@playwright/test';
-import { login, logout, pickSelect, pickTreeSelect, pickJalaliToday } from './support';
-
-async function startPurchaseRequest(page: Page) {
-  await page.goto('/processes');
-  await expect(page.getByRole('cell', { name: 'درخواست خرید' })).toBeVisible();
-  await page.getByRole('button', { name: 'ثبت درخواست' }).first().click();
-  await expect(page.locator('.ant-drawer-title')).toContainText('ثبت درخواست');
-
-  // فرم درخواست خرید
-  await page.locator('#full_name').fill('علی رضایی');
-  await page.locator('#national_id').fill('0684159414');
-  await page.locator('#mobile').fill('09123456789');
-  await pickJalaliToday(page, 'تاریخ درخواست');
-  await pickTreeSelect(page, 'واحد سازمانی', 'شرکت نمونه');
-  await pickSelect(page, 'نوع درخواست', 'کالا');
-  await pickSelect(page, 'اولویت', 'متوسط');
-
-  // ردیف اقلام (زیرفرم)
-  await page.getByRole('button', { name: 'افزودن ردیف' }).click();
-  await page.getByTestId('sub-items-item_name-0').fill('لپ‌تاپ کاری');
-  await page.getByTestId('sub-items-qty-0').fill('3');
-  await page.getByTestId('sub-items-price-0').fill('5000000');
-  // جمع ردیف و مبلغ کل محاسبه‌شده (ارقام فارسی fa-IR)
-  await expect(page.getByText(/۱۵٬۰۰۰٬۰۰۰|15,000,000/).first()).toBeVisible();
-
-  await page.getByRole('button', { name: 'ثبت درخواست', exact: true }).last().click();
-  // هدایت به صفحه نمونه
-  await page.waitForURL(/\/instances\/\d+/, { timeout: 20_000 });
-  return Number(page.url().match(/\/instances\/(\d+)/)![1]);
-}
+import { test, expect } from '@playwright/test';
+import { login, logout, startPurchaseRequest } from './support';
 
 test.describe.serial('سناریوی §۳۵ — درخواست خرید', () => {
   let iid = 0;

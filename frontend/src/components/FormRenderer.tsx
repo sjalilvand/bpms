@@ -355,10 +355,10 @@ function FileField({ disabled }: { disabled?: boolean }) {
         maxCount={1} disabled={disabled}
         action="/api/v1/attachments"
         headers={{ Authorization: `Bearer ${localStorage.getItem('bpms_token') || ''}` }}
-        onChange={(info) => {
+        onChange={(info: { file: { status?: string; response?: { id?: number; name?: string } } }) => {
           if (info.file.status === 'done') {
-            setFileId(info.file.response?.id);
-            setName(info.file.response?.name);
+            setFileId(info.file.response?.id ?? null);
+            setName(info.file.response?.name ?? '');
           }
         }}
         showUploadList={false}
