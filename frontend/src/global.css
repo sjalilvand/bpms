@@ -1,0 +1,69 @@
+/* استایل‌های سراسری RTL */
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: 'Vazirmatn', sans-serif;
+  background: #f5f7fa;
+  direction: rtl;
+}
+
+#root { min-height: 100vh; }
+
+/* نمودار BPMN */
+.bpmn-canvas {
+  width: 100%;
+  height: 520px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+  direction: ltr;
+}
+.bpmn-canvas .djs-palette { left: 20px !important; }
+
+/* نشانگرهای وضعیت نمودار زنده */
+.bpmn-canvas .bpms-active .djs-visual > :nth-child(1) {
+  stroke: #0e7490 !important;
+  stroke-width: 3px !important;
+  fill: rgba(14, 116, 144, 0.15) !important;
+}
+.bpmn-canvas .bpms-completed .djs-visual > :nth-child(1) {
+  stroke: #16a34a !important;
+  fill: rgba(22, 163, 74, 0.12) !important;
+}
+.bpmn-canvas .bpms-error .djs-visual > :nth-child(1) {
+  stroke: #dc2626 !important;
+  stroke-width: 3px !important;
+  fill: rgba(220, 38, 38, 0.15) !important;
+}
+
+/* فرم‌ساز */
+.field-card {
+  border: 1px solid #d9d9d9;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #fff;
+  cursor: grab;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.field-card:hover {
+  border-color: #0e7490;
+  box-shadow: 0 1px 4px rgba(14, 116, 144, 0.15);
+}
+.palette-item {
+  border: 1px dashed #b8c4cc;
+  border-radius: 6px;
+  padding: 6px 10px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  text-align: center;
+  background: #fff;
+}
+.palette-item:hover { border-color: #0e7490; color: #0e7490; }
+
+.mono { font-family: monospace; direction: ltr; display: inline-block; }
+
+/* اسکرول‌بار نازک */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }

@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# دیتابیس و فایل‌های اجرایی
+backend/bpms.db
+backend/bpms.db-wal
+backend/bpms.db-shm
+backend/uploads/
+backend/.env
+
+# Node
+node_modules/
+frontend/dist/
+*.local
+
+# ابزارها
+.DS_Store
+*.log
+.idea/
+.vscode/

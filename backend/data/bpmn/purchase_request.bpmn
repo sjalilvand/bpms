@@ -1,0 +1,169 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  id="Definitions_Purchase" targetNamespace="http://bpms.local/purchase">
+  <bpmn:process id="Process_PurchaseRequest" name="درخواست خرید" isExecutable="true">
+    <bpmn:startEvent id="StartEvent_1" name="ثبت درخواست">
+      <bpmn:outgoing>Flow_Start_Submit</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:userTask id="Task_Submit" name="ثبت درخواست خرید">
+      <bpmn:incoming>Flow_Start_Submit</bpmn:incoming>
+      <bpmn:outgoing>Flow_Submit_Manager</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:userTask id="Task_ManagerApprove" name="تأیید مدیر">
+      <bpmn:incoming>Flow_Submit_Manager</bpmn:incoming>
+      <bpmn:outgoing>Flow_Manager_Gateway</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway id="Gateway_Decision" name="تصمیم مدیر" default="Flow_Reject">
+      <bpmn:incoming>Flow_Manager_Gateway</bpmn:incoming>
+      <bpmn:outgoing>Flow_Reject</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Revision</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Approve</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:endEvent id="EndEvent_Reject" name="رد شده">
+      <bpmn:incoming>Flow_Reject</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:exclusiveGateway id="Gateway_JoinRevision" name="ادغام اصلاح">
+      <bpmn:incoming>Flow_Revision</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToSubmit</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:sequenceFlow id="Flow_Revision" name="بازگشت برای اصلاح" sourceRef="Gateway_Decision" targetRef="Gateway_JoinRevision">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">action == 'revision'</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_ToSubmit" name="اصلاح درخواست" sourceRef="Gateway_JoinRevision" targetRef="Task_Submit"/>
+    <bpmn:parallelGateway id="Gateway_Split" name="انشعاب موازی">
+      <bpmn:incoming>Flow_Approve</bpmn:incoming>
+      <bpmn:outgoing>Flow_Split_Order</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Split_Notify</bpmn:outgoing>
+    </bpmn:parallelGateway>
+    <bpmn:serviceTask id="Task_RegisterOrder" name="ثبت سفارش (سرویس)">
+      <bpmn:incoming>Flow_Split_Order</bpmn:incoming>
+      <bpmn:outgoing>Flow_Order_Join</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:userTask id="Task_FinanceNotify" name="اطلاع‌رسانی مالی">
+      <bpmn:incoming>Flow_Split_Notify</bpmn:incoming>
+      <bpmn:outgoing>Flow_Notify_Join</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:parallelGateway id="Gateway_Join" name="اتصال موازی">
+      <bpmn:incoming>Flow_Order_Join</bpmn:incoming>
+      <bpmn:incoming>Flow_Notify_Join</bpmn:incoming>
+      <bpmn:outgoing>Flow_Join_End</bpmn:outgoing>
+    </bpmn:parallelGateway>
+    <bpmn:endEvent id="EndEvent_Approved" name="تأیید نهایی">
+      <bpmn:incoming>Flow_Join_End</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_Start_Submit" sourceRef="StartEvent_1" targetRef="Task_Submit"/>
+    <bpmn:sequenceFlow id="Flow_Submit_Manager" sourceRef="Task_Submit" targetRef="Task_ManagerApprove"/>
+    <bpmn:sequenceFlow id="Flow_Manager_Gateway" sourceRef="Task_ManagerApprove" targetRef="Gateway_Decision"/>
+    <bpmn:sequenceFlow id="Flow_Reject" name="رد" sourceRef="Gateway_Decision" targetRef="EndEvent_Reject"/>
+    <bpmn:sequenceFlow id="Flow_Approve" name="تأیید" sourceRef="Gateway_Decision" targetRef="Gateway_Split">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">action == 'approve'</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_Split_Order" sourceRef="Gateway_Split" targetRef="Task_RegisterOrder"/>
+    <bpmn:sequenceFlow id="Flow_Split_Notify" sourceRef="Gateway_Split" targetRef="Task_FinanceNotify"/>
+    <bpmn:sequenceFlow id="Flow_Order_Join" sourceRef="Task_RegisterOrder" targetRef="Gateway_Join"/>
+    <bpmn:sequenceFlow id="Flow_Notify_Join" sourceRef="Task_FinanceNotify" targetRef="Gateway_Join"/>
+    <bpmn:sequenceFlow id="Flow_Join_End" sourceRef="Gateway_Join" targetRef="EndEvent_Approved"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Process_PurchaseRequest">
+      <bpmndi:BPMNShape id="StartEvent_1_di" bpmnElement="StartEvent_1">
+        <dc:Bounds x="152" y="252" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="140" y="295" width="62" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Submit_di" bpmnElement="Task_Submit">
+        <dc:Bounds x="240" y="230" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_ManagerApprove_di" bpmnElement="Task_ManagerApprove">
+        <dc:Bounds x="420" y="230" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_Decision_di" bpmnElement="Gateway_Decision" isMarkerVisible="true">
+        <dc:Bounds x="605" y="245" width="50" height="50"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="596" y="215" width="69" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="EndEvent_Reject_di" bpmnElement="EndEvent_Reject">
+        <dc:Bounds x="612" y="362" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="600" y="405" width="61" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_JoinRevision_di" bpmnElement="Gateway_JoinRevision" isMarkerVisible="true">
+        <dc:Bounds x="285" y="105" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_Split_di" bpmnElement="Gateway_Split" isMarkerVisible="true">
+        <dc:Bounds x="729" y="245" width="50" height="50"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="725" y="215" width="60" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_RegisterOrder_di" bpmnElement="Task_RegisterOrder">
+        <dc:Bounds x="850" y="130" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_FinanceNotify_di" bpmnElement="Task_FinanceNotify">
+        <dc:Bounds x="850" y="330" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_Join_di" bpmnElement="Gateway_Join" isMarkerVisible="true">
+        <dc:Bounds x="1039" y="245" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="EndEvent_Approved_di" bpmnElement="EndEvent_Approved">
+        <dc:Bounds x="1142" y="252" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1128" y="295" width="66" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_Start_Submit_di" bpmnElement="Flow_Start_Submit">
+        <di:waypoint x="188" y="270"/>
+        <di:waypoint x="240" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Submit_Manager_di" bpmnElement="Flow_Submit_Manager">
+        <di:waypoint x="360" y="270"/>
+        <di:waypoint x="420" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Manager_Gateway_di" bpmnElement="Flow_Manager_Gateway">
+        <di:waypoint x="540" y="270"/>
+        <di:waypoint x="605" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Reject_di" bpmnElement="Flow_Reject">
+        <di:waypoint x="630" y="295"/>
+        <di:waypoint x="630" y="362"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="636" y="325" width="20" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Revision_di" bpmnElement="Flow_Revision">
+        <di:waypoint x="605" y="270"/>
+        <di:waypoint x="310" y="270"/>
+        <di:waypoint x="310" y="155"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="380" y="250" width="90" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToSubmit_di" bpmnElement="Flow_ToSubmit">
+        <di:waypoint x="310" y="155"/>
+        <di:waypoint x="310" y="230"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Approve_di" bpmnElement="Flow_Approve">
+        <di:waypoint x="655" y="270"/>
+        <di:waypoint x="729" y="270"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="675" y="250" width="30" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Split_Order_di" bpmnElement="Flow_Split_Order">
+        <di:waypoint x="754" y="245"/>
+        <di:waypoint x="754" y="170"/>
+        <di:waypoint x="850" y="170"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Split_Notify_di" bpmnElement="Flow_Split_Notify">
+        <di:waypoint x="754" y="295"/>
+        <di:waypoint x="754" y="370"/>
+        <di:waypoint x="850" y="370"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Order_Join_di" bpmnElement="Flow_Order_Join">
+        <di:waypoint x="970" y="170"/>
+        <di:waypoint x="1064" y="170"/>
+        <di:waypoint x="1064" y="245"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Notify_Join_di" bpmnElement="Flow_Notify_Join">
+        <di:waypoint x="970" y="370"/>
+        <di:waypoint x="1064" y="370"/>
+        <di:waypoint x="1064" y="295"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Join_End_di" bpmnElement="Flow_Join_End">
+        <di:waypoint x="1089" y="270"/>
+        <di:waypoint x="1142" y="270"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
