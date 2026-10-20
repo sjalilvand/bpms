@@ -1,14 +1,17 @@
 // طراح فرایند BPMN — bpmn-js + تنظیم فعالیت‌ها (فرم/مسئول/نتیجه/کانکتور) + شرط‌ساز بصری جریان‌ها + اعتبارسنجی + انتشار
+// فاز ۹ — بازطراحی قالب مدل‌ساز: شل تمام‌ارتفاع، نوار ابزار گروه‌بندی‌شده، زوم شناور، نوار وضعیت
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Alert, Button, Card, Col, ColorPicker, Divider, Drawer, Empty, Form, Input, InputNumber, Modal, Row, Select,
-  Space, Spin, Tag, Typography, Upload, App as AntApp, Popconfirm,
+  Alert, Button, Card, ColorPicker, Divider, Form, Input, InputNumber, Modal, Select,
+  Space, Spin, Tag, Tooltip, Typography, Upload, App as AntApp, Popconfirm,
 } from 'antd';
 import {
-  DownloadOutlined, FileAddOutlined, SaveOutlined, ThunderboltOutlined,
-  UploadOutlined, SettingOutlined, FilterOutlined, DeleteOutlined, PlayCircleOutlined, BgColorsOutlined, BankOutlined,
+  ArrowLeftOutlined, DownloadOutlined, FileAddOutlined, SaveOutlined, ThunderboltOutlined,
+  UploadOutlined, SettingOutlined, FilterOutlined, DeleteOutlined, PlayCircleOutlined, BgColorsOutlined,
+  BankOutlined, ZoomInOutlined, ZoomOutOutlined, ExpandOutlined, InfoCircleOutlined,
+  CheckCircleFilled, WarningFilled, CloseCircleFilled, EditFilled,
 } from '@ant-design/icons';
-import { useParams, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api, TaskBinding, VersionRow, extractError } from '../api/client';
 import FormDesigner from '../components/FormDesigner';
 import ConditionBuilder from '../components/ConditionBuilder';
@@ -30,6 +33,7 @@ const PROCESS_COLORS: { name: string; stroke: string; fill: string }[] = [
 
 export default function ProcessDesignerPage() {
   const { id } = useParams();
+  const nav = useNavigate();
   const [sp, setSp] = useSearchParams();
   const processId = Number(id || 0);
   const versionId = Number(sp.get('v') || 0);
@@ -63,6 +67,12 @@ export default function ProcessDesignerPage() {
   const [decisionsList, setDecisionsList] = useState<{ id: number; key: string; title: string }[]>([]);
   const [calendarsList, setCalendarsList] = useState<{ id: number; name: string; is_default: boolean }[]>([]);
   const [subformEdit, setSubformEdit] = useState<{ formId: number; title: string } | null>(null);
+  // فاز ۹ — تجربه مدل‌ساز: تغییرات ذخیره‌نشده، آمار بوم، زوم، پنل تنظیمات
+  const [dirty, setDirty] = useState(false);
+  const [elCount, setElCount] = useState(0);
+  const [zoomPct, setZoomPct] = useState(100);
+  const [sideOpen, setSideOpen] = useState(true);
+  const importedRef = useRef(false);
 
   const load = useCallback(async () => {
     if (!processId) return;
@@ -82,7 +92,34 @@ export default function ProcessDesignerPage() {
     finally { setLoading(false); }
   }, [processId, versionId]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { setDirty(false); importedRef.current = false; load(); }, [load]);
+
+  // Ctrl+S — ذخیره سریع پیش‌نویس (فاز ۹)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        if (version?.status === 'draft' && !saving) saveVersion(false);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [version?.status, saving, versionId, mainPid, calendarId, bindings]);
+
+  // زوم بوم (فاز ۹)
+  const zoomBy = (factor: number | 'fit') => {
+    const m = modelerRef.current;
+    if (!m) return;
+    const canvas = m.get('canvas');
+    if (factor === 'fit') canvas.zoom('fit-viewport');
+    else canvas.zoom(canvas.zoom() * factor);
+    setZoomPct(Math.round(canvas.zoom() * 100));
+  };
+
+  const syncZoom = () => {
+    try { setZoomPct(Math.round(modelerRef.current?.get('canvas')?.zoom() * 100) || 100); } catch { /* ignore */ }
+  };
   useEffect(() => {
     api.get('/forms').then((r) => setFormsList(r.data.items)).catch(() => {});
     api.get('/users', { params: { page_size: 200 } }).then((r) => setUsersList(r.data.items)).catch(() => {});
@@ -177,6 +214,17 @@ export default function ProcessDesignerPage() {
     (window as any).__bpms_modeler = m;
   }, []);
 
+  // نشانگر «تغییرات ذخیره‌نشده» — فقط پس از پایان ایمپورت اولیه (فاز ۹)
+  const onModelerImported = useCallback(() => {
+    importedRef.current = true;
+    setDirty(false);
+    syncZoom();
+  }, []);
+
+  const onModelerDirty = useCallback(() => {
+    if (importedRef.current) setDirty(true);
+  }, []);
+
   // رنگ‌آمیزی عنصر انتخاب‌شده (فاز ۸)
   const applyElementColor = (stroke: string, fill: string) => {
     const el = selElRef.current; const m = modelerRef.current;
@@ -234,6 +282,7 @@ export default function ProcessDesignerPage() {
 
   const saveVersion = async (publish: boolean, changeNote: string = '', newVersionId?: number) => {
     setSaving(true);
+    setDirty(false);
     try {
       const content = await getXml();
       const vid = newVersionId || versionId;
@@ -336,16 +385,46 @@ export default function ProcessDesignerPage() {
     );
   }
 
+  const statusMeta = version
+    ? (version.status === 'draft'
+      ? { label: 'پیش‌نویس', color: 'gold' }
+      : version.status === 'published'
+        ? { label: 'منتشرشده', color: 'green' }
+        : { label: version.status, color: 'default' })
+    : null;
+
   return (
-    <Card
-      title={`طراح فرایند: ${process?.title || ''} ${version ? `— نسخه v${version.version} (${version.status === 'draft' ? 'پیش‌نویس' : version.status === 'published' ? 'منتشرشده' : version.status})` : ''}`}
-      extra={
-        <Space wrap>
+    <div className="pd-shell">
+      {/* ——————— نوار عنوان و اقدامات ——————— */}
+      <div className="pd-header">
+        <div className="pd-header__meta">
+          <Tooltip title="بازگشت به فهرست فرایندها">
+            <Button icon={<ArrowLeftOutlined />} onClick={() => nav('/processes')} aria-label="بازگشت به فرایندها" />
+          </Tooltip>
+          <div className="pd-header__titles">
+            <div className="pd-title">
+              <span>طراح فرایند: {process?.title || '…'}</span>
+              {statusMeta && version && (
+                <Tag style={{ marginInlineEnd: 0 }} color={statusMeta.color}>
+                  نسخه v{version.version} — {statusMeta.label}
+                </Tag>
+              )}
+              {dirty && <Tag style={{ marginInlineEnd: 0 }} color="orange" icon={<EditFilled />}>تغییرات ذخیره‌نشده</Tag>}
+            </div>
+            {process?.key && <div className="pd-subtitle mono">{process.key}</div>}
+          </div>
+        </div>
+        <Space wrap size={4} className="pd-header__actions">
           <Upload beforeUpload={(f: unknown) => uploadFile(f as unknown as File)} showUploadList={false} accept=".bpmn,.xml">
             <Button icon={<UploadOutlined />}>باز کردن فایل BPMN</Button>
           </Upload>
-          <Button icon={<DownloadOutlined />} onClick={downloadXml}>BPMN</Button>
-          <Button icon={<DownloadOutlined />} onClick={downloadSvg}>SVG</Button>
+          <Tooltip title="دانلود فایل BPMN">
+            <Button icon={<DownloadOutlined />} onClick={downloadXml}>BPMN</Button>
+          </Tooltip>
+          <Tooltip title="دانلود تصویر نمودار (SVG)">
+            <Button icon={<DownloadOutlined />} onClick={downloadSvg}>SVG</Button>
+          </Tooltip>
+          <Divider type="vertical" style={{ height: 22 }} />
           {version?.status === 'draft' && (
             <>
               <Button icon={<SaveOutlined />} loading={saving} onClick={() => saveVersion(false)}>ذخیره پیش‌نویس</Button>
@@ -374,33 +453,42 @@ export default function ProcessDesignerPage() {
               }}>ذخیره در بانک</Button>
           )}
         </Space>
-      }
-    >
-      {loading && !process && (
-        <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}><Spin size="large" /></div>
-      )}
-      {!loading && !version && (
-        <Alert type="info" showIcon style={{ marginBottom: 12 }}
-          message="این فرایند هنوز نسخه‌ای ندارد"
-          description="یک فایل BPMN بارگذاری کنید (دکمه «باز کردن فایل BPMN» در نوار بالا) و سپس «ساخت نسخه اول» را بزنید. پس از آن مدل قابل طراحی، تنظیم فرم/مسئول و انتشار خواهد بود." />
-      )}
-      {procs.length > 0 && (
-        <Alert style={{ marginBottom: 10 }} type="info"
-          message={<Space>فرایند اصلی: <Select size="small" style={{ minWidth: 260 }} value={mainPid} onChange={setMainPid}
-            options={procs.map((p: any) => ({ value: p.id, label: `${p.name} (${p.id})` }))} /></Space>} />
-      )}
-      {version && (
-        <Alert style={{ marginBottom: 10 }} type="info"
-          message={<Space wrap>
-            <span>تقویم کاری نسخه (برای محاسبه مهلت وظایف):</span>
-            <Select size="small" style={{ minWidth: 240 }} allowClear placeholder="بدون تقویم (مهلت خطی)"
+      </div>
+
+      {/* ——————— نوار زمینه: فرایند اصلی، تقویم، وضعیت اعتبارسنجی ——————— */}
+      <div className="pd-context">
+        {procs.length > 0 && (
+          <span className="pd-context__item">
+            <span className="pd-context__label">فرایند اصلی:</span>
+            <Select size="small" variant="filled" style={{ minWidth: 220 }} value={mainPid} onChange={setMainPid}
+              options={procs.map((p: any) => ({ value: p.id, label: `${p.name} (${p.id})` }))} />
+          </span>
+        )}
+        {version && (
+          <span className="pd-context__item">
+            <span className="pd-context__label">تقویم کاری (مهلت وظایف):</span>
+            <Select size="small" variant="filled" style={{ minWidth: 190 }} allowClear placeholder="بدون تقویم (مهلت خطی)"
               value={calendarId}
               onChange={(v) => setCalendarId(v ?? null)}
               options={calendarsList.map((c) => ({ value: c.id, label: `${c.name}${c.is_default ? ' — پیش‌فرض' : ''}` }))} />
-          </Space>} />
-      )}
-      {validation && (
-        <Alert style={{ marginBottom: 10 }} type={validation.errors.length ? 'error' : 'warning'} closable
+          </span>
+        )}
+        <span style={{ flex: 1 }} />
+        {validation && (validation.errors.length ? (
+          <Tag color="red" style={{ marginInlineEnd: 0 }} icon={<CloseCircleFilled />}>{validation.errors.length} خطای قطعی</Tag>
+        ) : validation.warnings.length ? (
+          <Tag color="orange" style={{ marginInlineEnd: 0 }} icon={<WarningFilled />}>{validation.warnings.length} هشدار</Tag>
+        ) : (
+          <Tag color="green" style={{ marginInlineEnd: 0 }} icon={<CheckCircleFilled />}>مدل معتبر</Tag>
+        ))}
+        <Tooltip title={sideOpen ? 'بستن پنل تنظیمات' : 'نمایش پنل تنظیمات'}>
+          <Button size="small" type={sideOpen ? 'primary' : 'default'} icon={<SettingOutlined />}
+            onClick={() => setSideOpen((o) => !o)} />
+        </Tooltip>
+      </div>
+
+      {validation && (validation.errors.length > 0 || validation.warnings.length > 0) && (
+        <Alert style={{ flexShrink: 0 }} type={validation.errors.length ? 'error' : 'warning'} closable
           message={validation.errors.length ? 'خطاهای قطعی (مانع انتشار)' : 'هشدارها (انتشار ممکن است)'}
           description={
             <ul style={{ margin: 0, paddingRight: 18 }}>
@@ -409,23 +497,53 @@ export default function ProcessDesignerPage() {
             </ul>
           } />
       )}
+
+      {loading && !process && (
+        <div className="pd-loading"><Spin size="large" /></div>
+      )}
+      {!loading && !version && (
+        <Alert type="info" showIcon
+          message="این فرایند هنوز نسخه‌ای ندارد"
+          description="یک فایل BPMN بارگذاری کنید (دکمه «باز کردن فایل BPMN» در نوار بالا) و سپس «ساخت نسخه اول» را بزنید. پس از آن مدل قابل طراحی، تنظیم فرم/مسئول و انتشار خواهد بود." />
+      )}
       {xml && (
-        <Row gutter={12}>
-          <Col span={18}>
-            <ModelerHost xml={xml} onReady={onModelerReady} onSelect={handleSelect} onParsed={(p) => { setProcs(p); if (!mainPid && p.length) setMainPid((p.find((x: any) => x.isExecutable) || p[0]).id); }} />
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              برای تنظیم فرم/مسئول/نتیجه، فعالیت موردنظر را روی نمودار انتخاب کنید تا پنل تنظیمات باز شود.
-            </Typography.Text>
-          </Col>
-          <Col span={6}>
-            <Card size="small" title={<span><SettingOutlined /> تنظیمات فعالیت انتخابی</span>} styles={{ body: { minHeight: 300 } }}>
-              {!selectedEl && <Alert type="info" message="ابتدا یک عنصر را روی نمودار انتخاب کنید" />}
-              {selectedEl && !configurable && !condCapable && (
-                <Alert type="info" message={`عنصر «${selectedEl.name}» (${selectedEl.type}) تنظیم خاصی ندارد`} />
-              )}
-              {selectedEl && isSeqFlow && !condCapable && (
-                <Alert type="info" message="شرط فقط روی جریان‌های خروجی از دروازه انحصاری/فراگیر اعمال می‌شود" />
-              )}
+        <div className="pd-main">
+          <div className="pd-canvas-wrap">
+            <div className="pd-canvas">
+              <ModelerHost
+                xml={xml} onReady={onModelerReady} onSelect={handleSelect}
+                onImported={onModelerImported} onDirty={onModelerDirty}
+                onStats={(n) => setElCount(n)} onZoom={setZoomPct}
+                onParsed={(p) => { setProcs(p); if (!mainPid && p.length) setMainPid((p.find((x: any) => x.isExecutable) || p[0]).id); }}
+              />
+              {/* کنترل زوم شناور (فاز ۹) */}
+              <div className="pd-zoom" dir="ltr">
+                <button type="button" className="pd-zoom__btn" title="بزرگ‌نمایی" onClick={() => zoomBy(1.2)}><ZoomInOutlined /></button>
+                <span className="pd-zoom__pct" data-testid="zoom-pct">{zoomPct}%</span>
+                <button type="button" className="pd-zoom__btn" title="کوچک‌نمایی" onClick={() => zoomBy(1 / 1.2)}><ZoomOutOutlined /></button>
+                <span className="pd-zoom__sep" />
+                <button type="button" className="pd-zoom__btn" title="اندازه صفحه" onClick={() => zoomBy('fit')}><ExpandOutlined /></button>
+              </div>
+            </div>
+            <div className="pd-statusbar">
+              <span><InfoCircleOutlined /> برای تنظیم فرم/مسئول/نتیجه، فعالیت موردنظر را روی نمودار انتخاب کنید تا پنل تنظیمات باز شود.</span>
+              <span className="pd-statusbar__sep" />
+              <span>{elCount > 0 ? `${elCount} عنصر روی بوم` : 'بوم آماده طراحی است'}</span>
+              <span style={{ flex: 1 }} />
+              {dirty && <Tag color="orange" style={{ marginInlineEnd: 0 }} icon={<EditFilled />}>ذخیره‌نشده</Tag>}
+              <span className="pd-statusbar__hint mono">Ctrl+S ذخیره سریع</span>
+            </div>
+          </div>
+          {sideOpen && (
+            <div className="pd-side">
+              <Card size="small" className="pd-side-card" title={<span><SettingOutlined /> تنظیمات فعالیت انتخابی</span>} styles={{ body: { padding: 12 } }}>
+                {!selectedEl && <Alert type="info" message="ابتدا یک عنصر را روی نمودار انتخاب کنید" />}
+                {selectedEl && !configurable && !condCapable && (
+                  <Alert type="info" message={`عنصر «${selectedEl.name}» (${selectedEl.type}) تنظیم خاصی ندارد`} />
+                )}
+                {selectedEl && isSeqFlow && !condCapable && (
+                  <Alert type="info" message="شرط فقط روی جریان‌های خروجی از دروازه انحصاری/فراگیر اعمال می‌شود" />
+                )}
               {selectedEl && condCapable && (
                 <div data-testid="condition-section">
                   <Divider style={{ margin: '4px 0 10px' }} />
@@ -596,9 +714,10 @@ export default function ProcessDesignerPage() {
                   )}
                 </Form>
               )}
-            </Card>
-          </Col>
-        </Row>
+              </Card>
+            </div>
+          )}
+        </div>
       )}
 
       <Modal open={newVersionOpen} title="ایجاد نسخه جدید" onCancel={() => setNewVersionOpen(false)}
@@ -621,56 +740,88 @@ export default function ProcessDesignerPage() {
         }} okText="ایجاد">
         نسخه پیش‌نویس جدیدی از مدل جاری ساخته می‌شود؛ نمونه‌های جاری به نسخه قبلی خود متصل می‌مانند (AC-14).
       </Modal>
-    </Card>
+    </div>
   );
 }
 
 // میزبان Modeler با لود XML — جدا برای مدیریت lifecycle؛ شنونده انتخاب در همین‌جا ثبت می‌شود
-function ModelerHost({ xml, onReady, onSelect, onParsed }: {
+// فاز ۹: گزارش dirty/stats/zoom به والد برای نوار وضعیت و نشانگر ذخیره‌نشده
+function ModelerHost({ xml, onReady, onSelect, onParsed, onImported, onDirty, onStats, onZoom }: {
   xml: string; onReady: (m: any) => void; onSelect: (element: any) => void; onParsed: (p: any[]) => void;
+  onImported: () => void; onDirty: () => void; onStats: (n: number) => void; onZoom: (pct: number) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const mRef = useRef<any>(null);
   const [ready, setReady] = useState(false);
+  const cbRef = useRef({ onReady, onSelect, onParsed, onImported, onDirty, onStats, onZoom });
+  cbRef.current = { onReady, onSelect, onParsed, onImported, onDirty, onStats, onZoom };
 
   useEffect(() => {
     if (!ref.current) return;
+    // پرچم لغو — در StrictMode (dev) cleanup پیش از resolve شدن import اجرا می‌شود؛
+    // بدون این گارد، نمونه اول هرگز destroy نشده و دو بوم روی هم باقی می‌ماند (فاز ۹)
+    let disposed = false;
+    let instance: any = null;
     import('bpmn-js/lib/Modeler').then((Mod) => {
-      const m = new Mod.default({
+      if (disposed || !ref.current) return;
+      instance = new Mod.default({
         container: ref.current as HTMLElement,
         keyboard: { bindTo: document },
         // پالت کامل BPMN — همه رویدادها/وظایف/دروازه‌ها/داده‌ها (فاز ۸)
         additionalModules: [BpmsCompletePaletteModule],
       });
-      mRef.current = m;
-      onReady(m);
+      mRef.current = instance;
+      cbRef.current.onReady(instance);
       // شنونده انتخاب روی همان نمونه زنده — بدون وابستگی به ترتیب mount والد
-      m.on('selection.changed', ({ newSelection }: any) => {
-        onSelect(newSelection && newSelection.length ? newSelection[0] : null);
+      instance.on('selection.changed', ({ newSelection }: any) => {
+        cbRef.current.onSelect(newSelection && newSelection.length ? newSelection[0] : null);
+      });
+      // نشانگر تغییرات ذخیره‌نشده + همگام‌سازی درصد زوم (فاز ۹)
+      instance.on('commandStack.changed', () => cbRef.current.onDirty());
+      instance.on('canvas.viewbox.changed', () => {
+        try { cbRef.current.onZoom(Math.round((instance as any).get('canvas').zoom() * 100) || 100); } catch { /* ignore */ }
       });
       setReady(true);
     });
-    return () => { mRef.current?.destroy(); mRef.current = null; };
+    return () => {
+      disposed = true;
+      instance?.destroy();
+      instance = null;
+      mRef.current = null;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     const m = mRef.current;
     if (!m || !xml || !ready) return;
+    // fit تأخیری — پس از پایداری چیدمان بوم (رفع بریدگی نمودار در پایین)
+    const fitDelayed = () => requestAnimationFrame(() => requestAnimationFrame(() => {
+      try {
+        (m as any).get('canvas').zoom('fit-viewport', 'auto');
+        cbRef.current.onZoom(Math.round((m as any).get('canvas').zoom() * 100) || 100);
+      } catch { /* ignore */ }
+    }));
     m.importXML(xml).then(() => {
       m.get('canvas').zoom('fit-viewport');
-      // فهرست فرایندهای فایل
+      fitDelayed();
+      const t = setTimeout(fitDelayed, 350);
+      // فهرست فرایندهای فایل + آمار عناصر برای نوار وضعیت
       try {
         const defs = m.getDefinitions();
         const items = (defs.rootElements || [])
           .filter((e: any) => e.$type === 'bpmn:Process')
           .map((e: any) => ({ id: e.id, name: e.name || e.id, isExecutable: e.isExecutable }));
-        onParsed(items);
+        const count = m.get('elementRegistry').getAll().length;
+        cbRef.current.onStats(count);
+        cbRef.current.onParsed(items);
       } catch { /* ignore */ }
+      cbRef.current.onImported();
+      return () => clearTimeout(t);
     }).catch((e: Error) => console.error('import failed', e));
   }, [xml, ready]);
 
-  return <div ref={ref} className="bpmn-canvas" style={{ height: 'calc(100vh - 320px)' }} />;
+  return <div ref={ref} className="bpmn-canvas" style={{ height: '100%' }} />;
 }
 
 // بارگذار زیرفرم در فرم‌ساز

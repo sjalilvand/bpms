@@ -1,6 +1,9 @@
-// پالت کامل BPMN — جایگزین پالت پیش‌فرض bpmn-js با کل عناصر استاندارد (فاز ۸)
+// پالت کامل BPMN — جایگزینِ کامل پالت پیش‌فرض bpmn-js با کل عناصر استاندارد (فاز ۸/۹)
 // رویدادها (شروع/میانی/پایان/مرزی با همه تعریف‌ها)، وظایف (۷ نوع + فراخوانی + زیرفرایند + تراکنش)،
 // دروازه‌ها (۵ نوع)، داده‌ها، حاشیه‌نویسی، گروه و استخر — همه با درگ‌اند‌دراپ بومی bpmn-js.
+//
+// فاز ۹ — با تعریف token «paletteProvider»، provider پیش‌فرض bpmn-js کاملاً جایگزین می‌شود؛
+// در حالت قبلی (ثبت با priority پایین) ورودی‌های پیش‌فرض با ورودی‌های ما ادغام و پالت نامرتب می‌شد.
 //
 // استفاده: Modeler با additionalModules={[ BpmsCompletePaletteModule ]}
 
@@ -188,8 +191,7 @@ export class BpmsCompletePaletteProvider {
   'spaceTool', 'lassoTool', 'handTool', 'globalConnect',
 ];
 
-// ثبت ماژول به‌عنوان additionalModules در bpmn-js
+// ثبت به‌عنوان جایگزین مستقیم token «paletteProvider» bpmn-js — بدون ادغام با پالت پیش‌فرض (فاز ۹)
 export const BpmsCompletePaletteModule: Record<string, unknown> = {
-  __init__: ['bpmsCompletePalette'],
-  bpmsCompletePalette: ['type', BpmsCompletePaletteProvider],
+  paletteProvider: ['type', BpmsCompletePaletteProvider],
 };

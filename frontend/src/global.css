@@ -126,11 +126,192 @@ body {
 /* سرصفحه فرم تم‌دار */
 .themed-form-header { box-shadow: 0 1px 4px rgba(15, 23, 42, 0.12); }
 
-/* بهبود پالت bpmn — فونت و RTL امن */
-.bpmn-canvas .djs-palette .entry { font-size: 18px; }
-.bpmn-canvas .djs-palette.two-column { width: 94px; }
-.bpmn-canvas .djs-palette .entry:hover { color: #0e7490; }
+/* بهبود پالت bpmn — فاز ۹: پالت شیک، اسکرول‌پذیر و بدون سرریز */
+.bpmn-canvas .djs-palette {
+  left: 16px !important;
+  top: 16px !important;
+  background: #fff !important;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.16);
+  overflow: hidden;
+  max-height: calc(100% - 32px);
+}
+.bpmn-canvas .djs-palette .entry { font-size: 20px; width: 46px; height: 46px; line-height: 46px; }
+.bpmn-canvas .djs-palette .entry:hover { color: #0e7490; background: #ecfeff; border-radius: 8px; }
+.bpmn-canvas .djs-palette.two-column { width: 104px; }
+/* پالت باز: شبکه دومحوره با اسکرول عمودی — جلوگیری از نوار بلند نامرتب */
+.bpmn-canvas .djs-palette.open .djs-palette-entries {
+  display: grid !important;
+  grid-template-columns: repeat(2, 46px);
+  gap: 2px;
+  padding: 6px;
+  max-height: calc(100vh - 300px);
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.bpmn-canvas .djs-palette:not(.open) .djs-palette-entries { display: none !important; }
+.bpmn-canvas .djs-palette .separator {
+  grid-column: 1 / -1;
+  height: 5px;
+  margin: 3px 2px;
+  border-radius: 3px;
+  background: #eef1f5;
+}
+.bpmn-canvas .djs-palette .djs-palette-toggle { border-radius: 12px 12px 0 0; }
 
 /* اسکرول‌بار نازک */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+
+/* ---------- فاز ۹: قالب مدل‌ساز فرایند (بازطراحی نامرتبی) ---------- */
+
+/* شل تمام‌ارتفاع — زیر هدر ۵۶px و حاشیه Content */
+.pd-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  height: calc(100vh - 88px);
+  min-height: 620px;
+}
+
+/* نوار عنوان و اقدامات */
+.pd-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 10px 14px;
+  flex-shrink: 0;
+}
+.pd-header__meta { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.pd-header__titles { min-width: 0; }
+.pd-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
+}
+.pd-subtitle { font-size: 11px; color: #94a3b8; }
+
+/* نوار زمینه فشرده */
+.pd-context {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 7px 14px;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.pd-context__item { display: flex; align-items: center; gap: 6px; }
+.pd-context__label { color: #64748b; white-space: nowrap; }
+
+.pd-loading {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+}
+
+/* بدنه: بوم + پنل تنظیمات */
+.pd-main { display: flex; gap: 10px; flex: 1; min-height: 0; }
+.pd-canvas-wrap {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  overflow: hidden;
+}
+.pd-canvas { position: relative; flex: 1; min-height: 0; }
+.pd-canvas .bpmn-canvas { height: 100%; border: none; border-radius: 0; }
+/* لوگوی bpmn.io نباید با کنترل زوم تصادم کند (فاز ۹) */
+.pd-canvas .bjs-powered-by { bottom: 52px !important; right: 16px !important; }
+
+/* کنترل زوم شناور */
+.pd-zoom {
+  position: absolute;
+  bottom: 14px;
+  inset-inline-end: 14px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.12);
+  padding: 4px;
+  z-index: 20;
+}
+.pd-zoom__btn {
+  width: 30px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  border-radius: 7px;
+  cursor: pointer;
+  color: #334155;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.pd-zoom__btn:hover { background: #ecfeff; color: #0e7490; }
+.pd-zoom__pct {
+  min-width: 42px;
+  text-align: center;
+  font-size: 11px;
+  color: #475569;
+  font-variant-numeric: tabular-nums;
+}
+.pd-zoom__sep { width: 1px; height: 18px; background: #e2e8f0; margin: 0 2px; }
+
+/* نوار وضعیت پایین بوم */
+.pd-statusbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  border-top: 1px solid #eef1f5;
+  padding: 6px 12px;
+  font-size: 12px;
+  color: #64748b;
+  flex-shrink: 0;
+  background: #fbfcfe;
+}
+.pd-statusbar__sep { width: 1px; height: 14px; background: #e2e8f0; }
+.pd-statusbar__hint {
+  background: #eef2f7;
+  border-radius: 5px;
+  padding: 1px 8px;
+  font-size: 11px;
+  color: #475569;
+}
+
+/* پنل تنظیمات کناری */
+.pd-side { width: 340px; flex-shrink: 0; overflow: auto; min-height: 0; }
+.pd-side-card { border-radius: 12px; overflow: hidden; }
+.pd-side-card .ant-card-head {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: #fff;
+}
+@media (max-width: 1280px) { .pd-side { width: 300px; } }
