@@ -30,6 +30,9 @@ MOCK_CONNECTORS = {
     "register_order": lambda data: {"order_id": f"SO-{int(time.time())}", "order_status": "registered"},
     "echo": lambda data: {"echo": {k: data.get(k) for k in list(data)[:10]}},
     "notify": lambda data: {"notified": True},
+    # فاز ۸ — کانکتورهای نمونه‌پروژه‌ها
+    "archive_document": lambda data: {"archived": True, "archive_code": f"ARC-{int(time.time())}"},
+    "issue_mission_order": lambda data: {"mission_order_id": f"MO-{int(time.time())}", "status": "issued"},
 }
 
 

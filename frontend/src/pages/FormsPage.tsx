@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   Button, Card, Empty, Form, Input, Modal, Space, Table, Tag, App as AntApp, Typography,
 } from 'antd';
-import { PlusOutlined, ReloadOutlined, EditOutlined, HistoryOutlined } from '@ant-design/icons';
+import { PlusOutlined, ReloadOutlined, EditOutlined, HistoryOutlined, BankOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { api, FormRow, Paged, VersionRow, extractError } from '../api/client';
 
@@ -62,6 +62,15 @@ export default function FormsPage() {
     } catch { setVersions([]); }
   };
 
+  // ذخیره فرم در بانک سازمانی (فاز ۸)
+  const saveToLibrary = async (f: FormRow) => {
+    if (!f.latest_version) { message.warning('این فرم نسخه‌ای ندارد'); return; }
+    try {
+      await api.post(`/library/forms/from-existing/${f.id}`, { category: '' });
+      message.success(`فرم «${f.title}» در بانک سازمانی ذخیره شد`);
+    } catch (e) { message.error(extractError(e)); }
+  };
+
   return (
     <Card
       title="فرم‌ها (فرم‌ساز)"
@@ -98,6 +107,7 @@ export default function FormsPage() {
                   onClick={() => nav(`/forms/${r.id}/design?v=${r.latest_version?.id || ''}`)}>طراحی</Button>
                 {r.latest_version && <Button size="small" type="link" onClick={() => newVersion(r)}>نسخه جدید</Button>}
                 <Button size="small" type="link" icon={<HistoryOutlined />} onClick={() => showVersions(r)}>نسخه‌ها</Button>
+                <Button size="small" type="link" icon={<BankOutlined />} onClick={() => saveToLibrary(r)}>ذخیره در بانک</Button>
               </Space>
             ),
           },

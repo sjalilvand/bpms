@@ -1,0 +1,185 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  id="Definitions_Trip" targetNamespace="http://bpms.local/mission">
+  <bpmn:process id="Process_BusinessTrip" name="ماموریت اداری" isExecutable="true">
+    <bpmn:startEvent id="Start_Trip" name="ثبت درخواست ماموریت">
+      <bpmn:outgoing>F_Trip_Start</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:userTask id="Task_TripRequest" name="تکمیل درخواست ماموریت">
+      <bpmn:incoming>F_Trip_Start</bpmn:incoming>
+      <bpmn:outgoing>F_Trip_Req_Mgr</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:userTask id="Task_TripManager" name="تأیید مدیر">
+      <bpmn:incoming>F_Trip_Req_Mgr</bpmn:incoming>
+      <bpmn:outgoing>F_Trip_Mgr_GW</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway id="GW_Trip" name="تصمیم مدیر" default="Flow_Trip_Reject">
+      <bpmn:incoming>F_Trip_Mgr_GW</bpmn:incoming>
+      <bpmn:outgoing>Flow_Trip_Reject</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Trip_Approve</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:endEvent id="End_TripRejected" name="رد شده">
+      <bpmn:incoming>Flow_Trip_Reject</bpmn:incoming>
+      <bpmn:incoming>Flow_Fin_Reject</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:exclusiveGateway id="GW_Cost" name="بررسی سقف هزینه" default="Flow_Cost_Low">
+      <bpmn:incoming>Flow_Trip_Approve</bpmn:incoming>
+      <bpmn:outgoing>Flow_Cost_High</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Cost_Low</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:userTask id="Task_FinanceApprove" name="تأیید مالی">
+      <bpmn:incoming>Flow_Cost_High</bpmn:incoming>
+      <bpmn:outgoing>F_Fin_GW</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway id="GW_Fin" name="تصمیم مالی" default="Flow_Fin_Reject">
+      <bpmn:incoming>F_Fin_GW</bpmn:incoming>
+      <bpmn:outgoing>Flow_Fin_Reject</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Fin_Approve</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:exclusiveGateway id="GW_JoinOrder" name="ادغام مسیرها">
+      <bpmn:incoming>Flow_Cost_Low</bpmn:incoming>
+      <bpmn:incoming>Flow_Fin_Approve</bpmn:incoming>
+      <bpmn:outgoing>F_Join_Issue</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="Task_IssueOrder" name="صدور حکم ماموریت">
+      <bpmn:incoming>F_Join_Issue</bpmn:incoming>
+      <bpmn:outgoing>F_Issue_Report</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:userTask id="Task_TripReport" name="گزارش بازگشت از ماموریت">
+      <bpmn:incoming>F_Issue_Report</bpmn:incoming>
+      <bpmn:outgoing>F_Report_End</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:endEvent id="End_TripDone" name="پایان ماموریت">
+      <bpmn:incoming>F_Report_End</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="F_Trip_Start" sourceRef="Start_Trip" targetRef="Task_TripRequest"/>
+    <bpmn:sequenceFlow id="F_Trip_Req_Mgr" sourceRef="Task_TripRequest" targetRef="Task_TripManager"/>
+    <bpmn:sequenceFlow id="F_Trip_Mgr_GW" sourceRef="Task_TripManager" targetRef="GW_Trip"/>
+    <bpmn:sequenceFlow id="Flow_Trip_Reject" name="رد" sourceRef="GW_Trip" targetRef="End_TripRejected"/>
+    <bpmn:sequenceFlow id="Flow_Trip_Approve" name="تأیید" sourceRef="GW_Trip" targetRef="GW_Cost">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">action == 'approve'</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_Cost_High" name="هزینه بالا" sourceRef="GW_Cost" targetRef="Task_FinanceApprove">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">trip_cost &gt; 10000000</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_Cost_Low" name="هزینه معمولی" sourceRef="GW_Cost" targetRef="GW_JoinOrder"/>
+    <bpmn:sequenceFlow id="F_Fin_GW" sourceRef="Task_FinanceApprove" targetRef="GW_Fin"/>
+    <bpmn:sequenceFlow id="Flow_Fin_Reject" name="رد مالی" sourceRef="GW_Fin" targetRef="End_TripRejected"/>
+    <bpmn:sequenceFlow id="Flow_Fin_Approve" name="تأیید مالی" sourceRef="GW_Fin" targetRef="GW_JoinOrder">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">action == 'approve'</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="F_Join_Issue" sourceRef="GW_JoinOrder" targetRef="Task_IssueOrder"/>
+    <bpmn:sequenceFlow id="F_Issue_Report" sourceRef="Task_IssueOrder" targetRef="Task_TripReport"/>
+    <bpmn:sequenceFlow id="F_Report_End" sourceRef="Task_TripReport" targetRef="End_TripDone"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_Definitions_Trip">
+    <bpmndi:BPMNPlane id="BPMNPlane_Definitions_Trip" bpmnElement="Process_BusinessTrip">
+      <bpmndi:BPMNShape id="Start_Trip_di" bpmnElement="Start_Trip">
+        <dc:Bounds x="120" y="252" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_TripRequest_di" bpmnElement="Task_TripRequest">
+        <dc:Bounds x="200" y="230" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_TripManager_di" bpmnElement="Task_TripManager">
+        <dc:Bounds x="370" y="230" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="GW_Trip_di" bpmnElement="GW_Trip" isMarkerVisible="true">
+        <dc:Bounds x="540" y="245" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_TripRejected_di" bpmnElement="End_TripRejected">
+        <dc:Bounds x="546" y="380" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="GW_Cost_di" bpmnElement="GW_Cost" isMarkerVisible="true">
+        <dc:Bounds x="650" y="245" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_FinanceApprove_di" bpmnElement="Task_FinanceApprove">
+        <dc:Bounds x="730" y="100" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="GW_Fin_di" bpmnElement="GW_Fin" isMarkerVisible="true">
+        <dc:Bounds x="920" y="115" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="GW_JoinOrder_di" bpmnElement="GW_JoinOrder" isMarkerVisible="true">
+        <dc:Bounds x="860" y="245" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_IssueOrder_di" bpmnElement="Task_IssueOrder">
+        <dc:Bounds x="980" y="230" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_TripReport_di" bpmnElement="Task_TripReport">
+        <dc:Bounds x="1150" y="230" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_TripDone_di" bpmnElement="End_TripDone">
+        <dc:Bounds x="1330" y="252" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="F_Trip_Start_di" bpmnElement="F_Trip_Start">
+        <di:waypoint x="156" y="270"/>
+        <di:waypoint x="200" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_Trip_Req_Mgr_di" bpmnElement="F_Trip_Req_Mgr">
+        <di:waypoint x="320" y="270"/>
+        <di:waypoint x="370" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_Trip_Mgr_GW_di" bpmnElement="F_Trip_Mgr_GW">
+        <di:waypoint x="490" y="270"/>
+        <di:waypoint x="540" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Trip_Reject_di" bpmnElement="Flow_Trip_Reject">
+        <di:waypoint x="590" y="270"/>
+        <di:waypoint x="568" y="270"/>
+        <di:waypoint x="568" y="398"/>
+        <di:waypoint x="546" y="398"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="558" y="374" width="30" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Trip_Approve_di" bpmnElement="Flow_Trip_Approve">
+        <di:waypoint x="590" y="270"/>
+        <di:waypoint x="650" y="270"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="640" y="246" width="40" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Cost_High_di" bpmnElement="Flow_Cost_High">
+        <di:waypoint x="700" y="270"/>
+        <di:waypoint x="715" y="270"/>
+        <di:waypoint x="715" y="140"/>
+        <di:waypoint x="730" y="140"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="705" y="116" width="80" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Cost_Low_di" bpmnElement="Flow_Cost_Low">
+        <di:waypoint x="700" y="270"/>
+        <di:waypoint x="860" y="270"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="850" y="246" width="96" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_Fin_GW_di" bpmnElement="F_Fin_GW">
+        <di:waypoint x="850" y="140"/>
+        <di:waypoint x="920" y="140"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Fin_Reject_di" bpmnElement="Flow_Fin_Reject">
+        <di:waypoint x="970" y="140"/>
+        <di:waypoint x="758" y="140"/>
+        <di:waypoint x="758" y="398"/>
+        <di:waypoint x="546" y="398"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="748" y="374" width="56" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Fin_Approve_di" bpmnElement="Flow_Fin_Approve">
+        <di:waypoint x="970" y="140"/>
+        <di:waypoint x="915" y="140"/>
+        <di:waypoint x="915" y="270"/>
+        <di:waypoint x="860" y="270"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="905" y="246" width="80" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_Join_Issue_di" bpmnElement="F_Join_Issue">
+        <di:waypoint x="910" y="270"/>
+        <di:waypoint x="980" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_Issue_Report_di" bpmnElement="F_Issue_Report">
+        <di:waypoint x="1100" y="270"/>
+        <di:waypoint x="1150" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_Report_End_di" bpmnElement="F_Report_End">
+        <di:waypoint x="1270" y="270"/>
+        <di:waypoint x="1330" y="270"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

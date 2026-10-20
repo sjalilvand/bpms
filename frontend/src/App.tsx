@@ -19,6 +19,7 @@ import AuditPage from './pages/AuditPage';
 import DecisionsPage from './pages/DecisionsPage';
 import CalendarsPage from './pages/CalendarsPage';
 import ReportsPage from './pages/ReportsPage';
+import LibraryPage from './pages/LibraryPage';
 
 function Protected({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -44,6 +45,7 @@ export default function App() {
         <Route path="/decisions" element={<Protected><DecisionsPage /></Protected>} />
         <Route path="/calendars" element={<Protected><CalendarsPage /></Protected>} />
         <Route path="/reports" element={<Protected><ReportsPage /></Protected>} />
+        <Route path="/library" element={<Protected><LibraryPage /></Protected>} />
         <Route path="/lookups" element={<Protected><LookupsPage /></Protected>} />
         <Route path="/org" element={<Protected><OrgPage /></Protected>} />
         <Route path="/users" element={<Protected><UsersPage /></Protected>} />

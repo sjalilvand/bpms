@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  id="Definitions_Ticket" targetNamespace="http://bpms.local/it">
+  <bpmn:process id="Process_ItTicket" name="تیکت پشتیبانی فناوری اطلاعات" isExecutable="true">
+    <bpmn:startEvent id="Start_Ticket" name="ثبت تیکت">
+      <bpmn:outgoing>F_T_Start</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:userTask id="Task_CreateTicket" name="ثبت تیکت پشتیبانی">
+      <bpmn:incoming>F_T_Start</bpmn:incoming>
+      <bpmn:outgoing>F_T_Create_Merge</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway id="GW_Merge" name="ادغام بازگشت‌ها">
+      <bpmn:incoming>F_T_Create_Merge</bpmn:incoming>
+      <bpmn:incoming>Flow_Back_Triage</bpmn:incoming>
+      <bpmn:incoming>Flow_Confirm_Back</bpmn:incoming>
+      <bpmn:outgoing>F_Merge_Triage</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:userTask id="Task_Triage" name="بررسی و اولویت‌بندی">
+      <bpmn:incoming>F_Merge_Triage</bpmn:incoming>
+      <bpmn:outgoing>F_Triage_Solve</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:userTask id="Task_Solve" name="حل مشکل">
+      <bpmn:incoming>F_Triage_Solve</bpmn:incoming>
+      <bpmn:outgoing>F_Solve_GW</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway id="GW_Solved" name="نتیجه حل" default="Flow_Back_Triage">
+      <bpmn:incoming>F_Solve_GW</bpmn:incoming>
+      <bpmn:outgoing>Flow_Back_Triage</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Solved</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:userTask id="Task_Confirm" name="تأیید درخواهنده">
+      <bpmn:incoming>Flow_Solved</bpmn:incoming>
+      <bpmn:outgoing>F_Confirm_GW</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway id="GW_Confirm" name="نتیجه تأیید" default="Flow_Confirm_Back">
+      <bpmn:incoming>F_Confirm_GW</bpmn:incoming>
+      <bpmn:outgoing>Flow_Confirm_Back</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Confirm_Close</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:endEvent id="End_TicketClosed" name="تیکت بسته شد">
+      <bpmn:incoming>Flow_Confirm_Close</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="F_T_Start" sourceRef="Start_Ticket" targetRef="Task_CreateTicket"/>
+    <bpmn:sequenceFlow id="F_T_Create_Merge" sourceRef="Task_CreateTicket" targetRef="GW_Merge"/>
+    <bpmn:sequenceFlow id="F_Merge_Triage" sourceRef="GW_Merge" targetRef="Task_Triage"/>
+    <bpmn:sequenceFlow id="F_Triage_Solve" sourceRef="Task_Triage" targetRef="Task_Solve"/>
+    <bpmn:sequenceFlow id="F_Solve_GW" sourceRef="Task_Solve" targetRef="GW_Solved"/>
+    <bpmn:sequenceFlow id="Flow_Back_Triage" name="حل نشد — بررسی مجدد" sourceRef="GW_Solved" targetRef="GW_Merge"/>
+    <bpmn:sequenceFlow id="Flow_Solved" name="حل شد" sourceRef="GW_Solved" targetRef="Task_Confirm">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">action == 'solved'</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="F_Confirm_GW" sourceRef="Task_Confirm" targetRef="GW_Confirm"/>
+    <bpmn:sequenceFlow id="Flow_Confirm_Back" name="عدم تأیید" sourceRef="GW_Confirm" targetRef="GW_Merge"/>
+    <bpmn:sequenceFlow id="Flow_Confirm_Close" name="تأیید" sourceRef="GW_Confirm" targetRef="End_TicketClosed">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">action == 'confirm'</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_Definitions_Ticket">
+    <bpmndi:BPMNPlane id="BPMNPlane_Definitions_Ticket" bpmnElement="Process_ItTicket">
+      <bpmndi:BPMNShape id="Start_Ticket_di" bpmnElement="Start_Ticket">
+        <dc:Bounds x="120" y="252" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_CreateTicket_di" bpmnElement="Task_CreateTicket">
+        <dc:Bounds x="200" y="230" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="GW_Merge_di" bpmnElement="GW_Merge" isMarkerVisible="true">
+        <dc:Bounds x="370" y="245" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Triage_di" bpmnElement="Task_Triage">
+        <dc:Bounds x="450" y="230" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Solve_di" bpmnElement="Task_Solve">
+        <dc:Bounds x="620" y="230" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="GW_Solved_di" bpmnElement="GW_Solved" isMarkerVisible="true">
+        <dc:Bounds x="790" y="245" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Confirm_di" bpmnElement="Task_Confirm">
+        <dc:Bounds x="900" y="230" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="GW_Confirm_di" bpmnElement="GW_Confirm" isMarkerVisible="true">
+        <dc:Bounds x="1070" y="245" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_TicketClosed_di" bpmnElement="End_TicketClosed">
+        <dc:Bounds x="1160" y="252" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="F_T_Start_di" bpmnElement="F_T_Start">
+        <di:waypoint x="156" y="270"/>
+        <di:waypoint x="200" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_T_Create_Merge_di" bpmnElement="F_T_Create_Merge">
+        <di:waypoint x="320" y="270"/>
+        <di:waypoint x="370" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_Merge_Triage_di" bpmnElement="F_Merge_Triage">
+        <di:waypoint x="420" y="270"/>
+        <di:waypoint x="450" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_Triage_Solve_di" bpmnElement="F_Triage_Solve">
+        <di:waypoint x="570" y="270"/>
+        <di:waypoint x="620" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_Solve_GW_di" bpmnElement="F_Solve_GW">
+        <di:waypoint x="740" y="270"/>
+        <di:waypoint x="790" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Back_Triage_di" bpmnElement="Flow_Back_Triage">
+        <di:waypoint x="840" y="270"/>
+        <di:waypoint x="370" y="270"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="360" y="246" width="152" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Solved_di" bpmnElement="Flow_Solved">
+        <di:waypoint x="840" y="270"/>
+        <di:waypoint x="900" y="270"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="890" y="246" width="40" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_Confirm_GW_di" bpmnElement="F_Confirm_GW">
+        <di:waypoint x="1020" y="270"/>
+        <di:waypoint x="1070" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Confirm_Back_di" bpmnElement="Flow_Confirm_Back">
+        <di:waypoint x="1120" y="270"/>
+        <di:waypoint x="370" y="270"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="360" y="246" width="72" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Confirm_Close_di" bpmnElement="Flow_Confirm_Close">
+        <di:waypoint x="1120" y="270"/>
+        <di:waypoint x="1160" y="270"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1150" y="246" width="40" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

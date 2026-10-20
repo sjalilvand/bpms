@@ -64,6 +64,73 @@ body {
 
 .mono { font-family: monospace; direction: ltr; display: inline-block; }
 
+/* ---------- فاز ۸: درگ‌اند‌دراپ و تم ---------- */
+
+/* آیتم پالت هنگام کشیده‌شدن */
+.palette-item--dragging { opacity: 0.5; border-style: solid; border-color: #0e7490; }
+.palette-item--disabled { opacity: 0.55; cursor: not-allowed; }
+
+/* نشانگر محل رهاسازی روی بوم */
+.drop-indicator {
+  height: 3px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #0e7490, #22d3ee);
+  margin: 2px 0;
+  box-shadow: 0 0 6px rgba(14, 116, 144, 0.5);
+  animation: dropPulse 0.8s ease-in-out infinite alternate;
+}
+@keyframes dropPulse { from { opacity: 0.6; } to { opacity: 1; } }
+
+/* بوم خالی / هدف رهاسازی */
+.canvas-empty {
+  border: 2px dashed #b8c4cc;
+  border-radius: 12px;
+  padding: 40px 16px;
+  text-align: center;
+  color: #64748b;
+  background: #fff;
+  transition: all 0.2s;
+}
+.canvas-empty--over, .canvas-droptarget {
+  border-color: #0e7490;
+  background: rgba(14, 116, 144, 0.05);
+}
+
+/* پیش‌نمایش شناور حین درگ */
+.drag-overlay-chip {
+  background: #0e7490;
+  color: #fff;
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  box-shadow: 0 6px 18px rgba(14, 116, 144, 0.35);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* پیش‌تنم‌های تم فرم */
+.theme-preset {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: pointer;
+  background: #fff;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.theme-preset:hover { border-color: #0e7490; box-shadow: 0 2px 8px rgba(14, 116, 144, 0.2); }
+.theme-preset__header { height: 10px; }
+.theme-preset__body { height: 26px; padding: 4px 6px; display: flex; flex-direction: column; gap: 3px; }
+.theme-preset__line { height: 5px; border-radius: 2px; width: 70%; }
+.theme-preset__line--soft { width: 45%; }
+
+/* سرصفحه فرم تم‌دار */
+.themed-form-header { box-shadow: 0 1px 4px rgba(15, 23, 42, 0.12); }
+
+/* بهبود پالت bpmn — فونت و RTL امن */
+.bpmn-canvas .djs-palette .entry { font-size: 18px; }
+.bpmn-canvas .djs-palette.two-column { width: 94px; }
+.bpmn-canvas .djs-palette .entry:hover { color: #0e7490; }
+
 /* اسکرول‌بار نازک */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }

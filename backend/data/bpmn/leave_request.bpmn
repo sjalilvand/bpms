@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  id="Definitions_Leave" targetNamespace="http://bpms.local/leave">
+  <bpmn:process id="Process_LeaveRequest" name="مرخصی کارکنان" isExecutable="true">
+    <bpmn:startEvent id="Start_Leave" name="ثبت درخواست مرخصی">
+      <bpmn:outgoing>F_Start_Submit</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:userTask id="Task_SubmitLeave" name="ثبت درخواست مرخصی">
+      <bpmn:incoming>F_Start_Submit</bpmn:incoming>
+      <bpmn:outgoing>F_Submit_Sup</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:userTask id="Task_SupervisorApprove" name="تأیید سرپرست">
+      <bpmn:incoming>F_Submit_Sup</bpmn:incoming>
+      <bpmn:outgoing>F_Sup_GW</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway id="GW_Supervisor" name="تصمیم سرپرست" default="Flow_Leave_Reject">
+      <bpmn:incoming>F_Sup_GW</bpmn:incoming>
+      <bpmn:outgoing>Flow_Leave_Reject</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Leave_Approve</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:endEvent id="End_Leave_Rejected" name="رد شده">
+      <bpmn:incoming>Flow_Leave_Reject</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:exclusiveGateway id="GW_Days" name="بررسی مدت مرخصی" default="Flow_Days_Short">
+      <bpmn:incoming>Flow_Leave_Approve</bpmn:incoming>
+      <bpmn:outgoing>Flow_Days_HR</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Days_Short</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:userTask id="Task_HRApprove" name="تأیید منابع انسانی">
+      <bpmn:incoming>Flow_Days_HR</bpmn:incoming>
+      <bpmn:outgoing>F_HR_End</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:endEvent id="End_Leave_Approved" name="تأیید نهایی">
+      <bpmn:incoming>Flow_Days_Short</bpmn:incoming>
+      <bpmn:incoming>F_HR_End</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="F_Start_Submit" sourceRef="Start_Leave" targetRef="Task_SubmitLeave"/>
+    <bpmn:sequenceFlow id="F_Submit_Sup" sourceRef="Task_SubmitLeave" targetRef="Task_SupervisorApprove"/>
+    <bpmn:sequenceFlow id="F_Sup_GW" sourceRef="Task_SupervisorApprove" targetRef="GW_Supervisor"/>
+    <bpmn:sequenceFlow id="Flow_Leave_Reject" name="رد" sourceRef="GW_Supervisor" targetRef="End_Leave_Rejected"/>
+    <bpmn:sequenceFlow id="Flow_Leave_Approve" name="تأیید" sourceRef="GW_Supervisor" targetRef="GW_Days">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">action == 'approve'</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_Days_HR" name="بیش از ۳ روز" sourceRef="GW_Days" targetRef="Task_HRApprove">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">days_count &gt; 3</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_Days_Short" name="۳ روز یا کمتر" sourceRef="GW_Days" targetRef="End_Leave_Approved"/>
+    <bpmn:sequenceFlow id="F_HR_End" sourceRef="Task_HRApprove" targetRef="End_Leave_Approved"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_Definitions_Leave">
+    <bpmndi:BPMNPlane id="BPMNPlane_Definitions_Leave" bpmnElement="Process_LeaveRequest">
+      <bpmndi:BPMNShape id="Start_Leave_di" bpmnElement="Start_Leave">
+        <dc:Bounds x="140" y="252" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_SubmitLeave_di" bpmnElement="Task_SubmitLeave">
+        <dc:Bounds x="220" y="230" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_SupervisorApprove_di" bpmnElement="Task_SupervisorApprove">
+        <dc:Bounds x="390" y="230" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="GW_Supervisor_di" bpmnElement="GW_Supervisor" isMarkerVisible="true">
+        <dc:Bounds x="560" y="245" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Leave_Rejected_di" bpmnElement="End_Leave_Rejected">
+        <dc:Bounds x="566" y="380" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="GW_Days_di" bpmnElement="GW_Days" isMarkerVisible="true">
+        <dc:Bounds x="670" y="245" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_HRApprove_di" bpmnElement="Task_HRApprove">
+        <dc:Bounds x="790" y="230" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Leave_Approved_di" bpmnElement="End_Leave_Approved">
+        <dc:Bounds x="970" y="252" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="F_Start_Submit_di" bpmnElement="F_Start_Submit">
+        <di:waypoint x="176" y="270"/>
+        <di:waypoint x="220" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_Submit_Sup_di" bpmnElement="F_Submit_Sup">
+        <di:waypoint x="340" y="270"/>
+        <di:waypoint x="390" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_Sup_GW_di" bpmnElement="F_Sup_GW">
+        <di:waypoint x="510" y="270"/>
+        <di:waypoint x="560" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Leave_Reject_di" bpmnElement="Flow_Leave_Reject">
+        <di:waypoint x="610" y="270"/>
+        <di:waypoint x="588" y="270"/>
+        <di:waypoint x="588" y="398"/>
+        <di:waypoint x="566" y="398"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="578" y="374" width="30" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Leave_Approve_di" bpmnElement="Flow_Leave_Approve">
+        <di:waypoint x="610" y="270"/>
+        <di:waypoint x="670" y="270"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="660" y="246" width="40" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Days_HR_di" bpmnElement="Flow_Days_HR">
+        <di:waypoint x="720" y="270"/>
+        <di:waypoint x="790" y="270"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="780" y="246" width="96" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Days_Short_di" bpmnElement="Flow_Days_Short">
+        <di:waypoint x="720" y="270"/>
+        <di:waypoint x="970" y="270"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="960" y="246" width="104" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_HR_End_di" bpmnElement="F_HR_End">
+        <di:waypoint x="910" y="270"/>
+        <di:waypoint x="970" y="270"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

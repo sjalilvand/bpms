@@ -39,6 +39,7 @@ class FormIn(BaseModel):
 class SchemaIn(BaseModel):
     title: str | None = None
     fields: list[dict] = []
+    theme: dict | None = None  # تم و ظاهر فرم (فاز ۸) — رنگ/گردی/چیدمان
 
 
 class VersionIn(BaseModel):

@@ -2,12 +2,12 @@
 // مجوز نهایی هر اجرا از سرور دریافت می‌شود؛ این جزء جایگزین کنترل دسترسی نیست.
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Button, Checkbox, Col, DatePicker, Divider, Descriptions, Form, Input, InputNumber,
+  Button, Checkbox, Col, ConfigProvider, DatePicker, Divider, Descriptions, Form, Input, InputNumber,
   Popover, Radio, Row, Select, Space, TreeSelect, Upload, Typography, Alert,
 } from 'antd';
 import { DeleteOutlined, PlusOutlined, PaperClipOutlined } from '@ant-design/icons';
-import type { FormSchema, FormField } from '../lib/formSchema';
-import { validateFieldClient, computeFormula } from '../lib/formSchema';
+import type { FormSchema, FormField, FormTheme } from '../lib/formSchema';
+import { validateFieldClient, computeFormula, DEFAULT_THEME } from '../lib/formSchema';
 import { evaluateCondition } from '../lib/formula';
 import { gregorianToJalaliStr, normalizeNationalId, normalizeMobile, formatMoney } from '../lib/persian';
 import { api } from '../api/client';
@@ -29,6 +29,7 @@ interface Props {
   readOnly?: boolean;
   submitting?: boolean;
   hideActions?: boolean;
+  showHeader?: boolean;
   submitText?: string;
   submitResults?: { value: string; label: string }[];
   onFinish?: (values: Record<string, unknown>, result?: string) => void;
@@ -36,7 +37,7 @@ interface Props {
 }
 
 export default function FormRenderer({
-  schema, initialValues, readOnly, submitting, hideActions,
+  schema, initialValues, readOnly, submitting, hideActions, showHeader,
   submitText = 'ثبت', submitResults, onFinish, formRef,
 }: Props) {
   const [form] = Form.useForm();
@@ -282,33 +283,78 @@ export default function FormRenderer({
     );
   };
 
+  // تم فرم — رنگ و ظاهر اختصاصی هر فرم (فاز ۸)
+  const theme: FormTheme = schema.theme || DEFAULT_THEME;
+  const compact = theme.density === 'compact';
+
   return (
-    <Form form={form} layout="vertical" onFinish={() => finish()}>
-      <Row gutter={16}>
-        {(schema.fields || []).filter(visible).map(renderField)}
-      </Row>
-      {Object.keys(errors).some((k) => k.includes('.')) && (
-        <Alert type="error" showIcon style={{ marginTop: 8 }}
-          message="برخی ردیف‌های زیرفرم خطا دارند؛ موارد مشخص‌شده را اصلاح کنید" />
-      )}
-      {!hideActions && !readOnly && (
-        <div style={{ marginTop: 16 }}>
-          {submitResults?.length ? (
-            <Space wrap>
-              {submitResults.map((r) => (
-                <Button key={r.value} type={r.value === 'approve' ? 'primary' : 'default'}
-                  danger={r.value === 'reject'} loading={submitting}
-                  onClick={() => finish(r.value)}>
-                  {r.label}
-                </Button>
-              ))}
-            </Space>
-          ) : (
-            <Button type="primary" htmlType="submit" loading={submitting}>{submitText}</Button>
+    <ConfigProvider
+      theme={{
+        token: {
+          colorPrimary: theme.primary || '#0e7490',
+          borderRadius: theme.radius ?? 8,
+          colorBgContainer: theme.fieldBg || '#ffffff',
+          fontFamily: theme.font || "'Vazirmatn', sans-serif",
+        },
+        components: {
+          Form: { labelColor: theme.labelColor || undefined },
+        },
+      }}
+    >
+      <div
+        className="themed-form"
+        data-theme={theme.primary?.replace('#', '') || 'teal'}
+        style={{
+          background: theme.background || '#f8fafc',
+          borderRadius: (theme.radius ?? 8) + 4,
+          padding: compact ? 12 : 20,
+          border: '1px solid rgba(15, 23, 42, 0.08)',
+        }}
+      >
+        {(showHeader || theme.headerBg) && schema.title && (
+          <div
+            className="themed-form-header"
+            style={{
+              background: theme.headerBg || 'transparent',
+              color: theme.headerColor || theme.primary || '#0f172a',
+              borderRadius: (theme.radius ?? 8) + 2,
+              padding: compact ? '8px 14px' : '12px 18px',
+              marginBottom: compact ? 10 : 16,
+              fontWeight: 700,
+              fontSize: compact ? 14 : 16,
+            }}
+          >
+            {schema.title}
+          </div>
+        )}
+        <Form form={form} layout="vertical" onFinish={() => finish()} size={compact ? 'small' : 'middle'}>
+          <Row gutter={16}>
+            {(schema.fields || []).filter(visible).map(renderField)}
+          </Row>
+          {Object.keys(errors).some((k) => k.includes('.')) && (
+            <Alert type="error" showIcon style={{ marginTop: 8 }}
+              message="برخی ردیف‌های زیرفرم خطا دارند؛ موارد مشخص‌شده را اصلاح کنید" />
           )}
-        </div>
-      )}
-    </Form>
+          {!hideActions && !readOnly && (
+            <div style={{ marginTop: 16 }}>
+              {submitResults?.length ? (
+                <Space wrap>
+                  {submitResults.map((r) => (
+                    <Button key={r.value} type={r.value === 'approve' ? 'primary' : 'default'}
+                      danger={r.value === 'reject'} loading={submitting}
+                      onClick={() => finish(r.value)}>
+                      {r.label}
+                    </Button>
+                  ))}
+                </Space>
+              ) : (
+                <Button type="primary" htmlType="submit" loading={submitting}>{submitText}</Button>
+              )}
+            </div>
+          )}
+        </Form>
+      </div>
+    </ConfigProvider>
   );
 }
 

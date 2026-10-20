@@ -1,12 +1,12 @@
 // طراح فرایند BPMN — bpmn-js + تنظیم فعالیت‌ها (فرم/مسئول/نتیجه/کانکتور) + شرط‌ساز بصری جریان‌ها + اعتبارسنجی + انتشار
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Alert, Button, Card, Col, Drawer, Empty, Form, Input, InputNumber, Modal, Row, Select,
-  Space, Spin, Tag, Typography, Upload, App as AntApp, Popconfirm, Divider,
+  Alert, Button, Card, Col, ColorPicker, Divider, Drawer, Empty, Form, Input, InputNumber, Modal, Row, Select,
+  Space, Spin, Tag, Typography, Upload, App as AntApp, Popconfirm,
 } from 'antd';
 import {
   DownloadOutlined, FileAddOutlined, SaveOutlined, ThunderboltOutlined,
-  UploadOutlined, SettingOutlined, FilterOutlined, DeleteOutlined, PlayCircleOutlined,
+  UploadOutlined, SettingOutlined, FilterOutlined, DeleteOutlined, PlayCircleOutlined, BgColorsOutlined, BankOutlined,
 } from '@ant-design/icons';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { api, TaskBinding, VersionRow, extractError } from '../api/client';
@@ -14,6 +14,19 @@ import FormDesigner from '../components/FormDesigner';
 import ConditionBuilder from '../components/ConditionBuilder';
 import type { FormSchema } from '../lib/formSchema';
 import { CondGroup, emptyCondition, isGatewayFlow, parseCondition, renderCondition } from '../lib/conditions';
+import { BpmsCompletePaletteModule } from '../lib/bpmnCompletePalette';
+
+// جفت‌رنگ‌های سازمانی برای رنگ‌آمیزی عناصر نمودار (خط + پس‌زمینه ملایم)
+const PROCESS_COLORS: { name: string; stroke: string; fill: string }[] = [
+  { name: 'آبی', stroke: '#1d4ed8', fill: '#dbeafe' },
+  { name: 'فیروزه‌ای', stroke: '#0e7490', fill: '#cffafe' },
+  { name: 'سبز', stroke: '#059669', fill: '#d1fae5' },
+  { name: 'کهربایی', stroke: '#d97706', fill: '#fef3c7' },
+  { name: 'قرمز', stroke: '#dc2626', fill: '#fee2e2' },
+  { name: 'بنفش', stroke: '#7c3aed', fill: '#ede9fe' },
+  { name: 'خاکستری', stroke: '#475569', fill: '#e2e8f0' },
+  { name: 'صورتی', stroke: '#db2777', fill: '#fce7f3' },
+];
 
 export default function ProcessDesignerPage() {
   const { id } = useParams();
@@ -43,6 +56,7 @@ export default function ProcessDesignerPage() {
   const [mainPid, setMainPid] = useState('');
   const [calendarId, setCalendarId] = useState<number | null>(null);
   const [newVersionOpen, setNewVersionOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [formsList, setFormsList] = useState<{ id: number; title: string }[]>([]);
   const [usersList, setUsersList] = useState<{ id: number; full_name: string }[]>([]);
   const [rolesList, setRolesList] = useState<{ code: string; title: string }[]>([]);
@@ -52,11 +66,12 @@ export default function ProcessDesignerPage() {
 
   const load = useCallback(async () => {
     if (!processId) return;
+    setLoading(true);
     try {
       const p = await api.get(`/processes/${processId}`);
       setProcess({ id: p.data.id, key: p.data.key, title: p.data.title, versions: p.data.versions });
       let vid = versionId || p.data.latest_version?.id;
-      if (!vid) { message.info('این فرایند هنوز نسخه‌ای ندارد؛ یک BPMN بارگذاری کنید'); return; }
+      if (!vid) { setXml(''); message.info('این فرایند هنوز نسخه‌ای ندارد؛ یک فایل BPMN بارگذاری کنید'); return; }
       const v = await api.get(`/processes/versions/${vid}`);
       setVersion(v.data);
       setXml(v.data.bpmn_xml);
@@ -64,6 +79,7 @@ export default function ProcessDesignerPage() {
       setCalendarId(v.data.config_json?.calendarId || null);
       setMainPid(v.data.main_process_id);
     } catch (e) { message.error(extractError(e)); }
+    finally { setLoading(false); }
   }, [processId, versionId]);
 
   useEffect(() => { load(); }, [load]);
@@ -161,7 +177,23 @@ export default function ProcessDesignerPage() {
     (window as any).__bpms_modeler = m;
   }, []);
 
+  // رنگ‌آمیزی عنصر انتخاب‌شده (فاز ۸)
+  const applyElementColor = (stroke: string, fill: string) => {
+    const el = selElRef.current; const m = modelerRef.current;
+    if (!el || !m) return;
+    m.get('modeling').setColor([el], { fill, stroke });
+    message.success(`رنگ «${el.businessObject?.name || el.id}» اعمال شد — برای ماندگاری نسخه را ذخیره کنید`);
+  };
+
+  const clearElementColor = () => {
+    const el = selElRef.current; const m = modelerRef.current;
+    if (!el || !m) return;
+    try { m.get('modeling').setColor([el], {}); } catch { /* نسخه‌های قدیمی */ }
+    message.success('رنگ عنصر پاک شد');
+  };
+
   const getXml = async (): Promise<string> => {
+    if (!modelerRef.current) throw new Error('مدل جاری بارگذاری نشده است');
     const { xml: out } = await modelerRef.current.saveXML({ format: true });
     return out;
   };
@@ -184,11 +216,39 @@ export default function ProcessDesignerPage() {
     return false;
   };
 
+  // ساخت نسخه اول برای فرایندی که هنوز نسخه ندارد (رفع بن‌بست قبلی)
+  const createFirstVersion = async () => {
+    if (!xml) { message.warning('ابتدا یک فایل BPMN بارگذاری کنید'); return; }
+    setSaving(true);
+    try {
+      const r = await api.post(`/processes/${processId}/versions`, {
+        bpmn_xml: xml, main_process_id: mainPid, config_json: { bindings: {}, calendarId: null },
+        change_note: 'نسخه اول از فایل بارگذاری‌شده',
+      });
+      message.success('نسخه اول ساخته شد — اکنون قابل طراحی و انتشار است');
+      setSp({ v: String(r.data.id) });
+      load();
+    } catch (e) { message.error(extractError(e)); }
+    finally { setSaving(false); }
+  };
+
   const saveVersion = async (publish: boolean, changeNote: string = '', newVersionId?: number) => {
     setSaving(true);
     try {
       const content = await getXml();
       const vid = newVersionId || versionId;
+      if (!vid) {
+        // فرایند بدون نسخه — ساخت نسخه اول از مدل جاری
+        const r = await api.post(`/processes/${processId}/versions`, {
+          bpmn_xml: content, main_process_id: mainPid, config_json: { bindings, calendarId },
+          change_note: changeNote || 'نسخه اول از فایل بارگذاری‌شده',
+        });
+        message.success('نسخه اول ساخته شد');
+        setSp({ v: String(r.data.id) });
+        setSaving(false);
+        load();
+        return;
+      }
       await api.put(`/processes/versions/${vid}`, {
         bpmn_xml: content,
         main_process_id: mainPid,
@@ -294,14 +354,36 @@ export default function ProcessDesignerPage() {
               </Popconfirm>
             </>
           )}
-          {version?.status !== 'draft' && (
+          {version && version.status !== 'draft' && (
             <Button icon={<FileAddOutlined />} onClick={() => setNewVersionOpen(true)}>نسخه جدید از این مدل</Button>
           )}
-          <Button onClick={validateNow}>اعتبارسنجی</Button>
+          {!version && xml && (
+            <Button type="primary" icon={<FileAddOutlined />} loading={saving} onClick={createFirstVersion}>ساخت نسخه اول از فایل بارگذاری‌شده</Button>
+          )}
+          {version && <Button onClick={validateNow}>اعتبارسنجی</Button>}
+          {version && (
+            <Button icon={<BankOutlined />} loading={saving}
+              onClick={async () => {
+                try {
+                  const content = await getXml();
+                  await api.post(`/library/processes/from-existing/${processId}`, {
+                    bpmn_xml: content, main_process_id: mainPid, category: '',
+                  });
+                  message.success('مدل در بانک فرایندهای سازمانی ذخیره شد');
+                } catch (e) { message.error(extractError(e)); }
+              }}>ذخیره در بانک</Button>
+          )}
         </Space>
       }
     >
-      {!version && <Empty description="نسخه‌ای برای طراحی وجود ندارد — یک فرایند جدید ایجاد کنید یا فایل BPMN بارگذاری نمایید" />}
+      {loading && !process && (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}><Spin size="large" /></div>
+      )}
+      {!loading && !version && (
+        <Alert type="info" showIcon style={{ marginBottom: 12 }}
+          message="این فرایند هنوز نسخه‌ای ندارد"
+          description="یک فایل BPMN بارگذاری کنید (دکمه «باز کردن فایل BPMN» در نوار بالا) و سپس «ساخت نسخه اول» را بزنید. پس از آن مدل قابل طراحی، تنظیم فرم/مسئول و انتشار خواهد بود." />
+      )}
       {procs.length > 0 && (
         <Alert style={{ marginBottom: 10 }} type="info"
           message={<Space>فرایند اصلی: <Select size="small" style={{ minWidth: 260 }} value={mainPid} onChange={setMainPid}
@@ -403,6 +485,37 @@ export default function ProcessDesignerPage() {
                   </Space>
                 </div>
               )}
+              {selectedEl && (
+                <div style={{ marginBottom: 10 }} data-testid="color-section">
+                  <Divider style={{ margin: '4px 0 10px' }} />
+                  <Space wrap size={4}>
+                    <BgColorsOutlined />
+                    <Typography.Text strong style={{ fontSize: 12 }}>رنگ‌آمیزی عنصر</Typography.Text>
+                  </Space>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
+                    {PROCESS_COLORS.map((c) => (
+                      <button
+                        key={c.name}
+                        title={c.name}
+                        onClick={() => applyElementColor(c.stroke, c.fill)}
+                        style={{
+                          width: 26, height: 22, borderRadius: 4, cursor: 'pointer',
+                          border: `2px solid ${c.stroke}`, background: c.fill, padding: 0,
+                        }}
+                      />
+                    ))}
+                  </div>
+                  <Space style={{ marginTop: 6 }} size={6}>
+                    <ColorPicker size="small" showText disabledFormat
+                      onChange={(c) => {
+                        const hex = c.toHexString();
+                        applyElementColor(hex, hex + '33');
+                      }} />
+                    <Typography.Text type="secondary" style={{ fontSize: 11 }}>رنگ سفارشی</Typography.Text>
+                    <Button size="small" type="link" onClick={clearElementColor}>پاک‌کردن رنگ</Button>
+                  </Space>
+                </div>
+              )}
               {selectedEl && configurable && (
                 <Form layout="vertical" size="small">
                   <Divider style={{ margin: '4px 0 12px' }} />
@@ -490,6 +603,10 @@ export default function ProcessDesignerPage() {
 
       <Modal open={newVersionOpen} title="ایجاد نسخه جدید" onCancel={() => setNewVersionOpen(false)}
         onOk={async () => {
+          if (!modelerRef.current) {
+            message.error('مدل جاری بارگذاری نشده است — ابتدا فایل BPMN را باز کنید');
+            return;
+          }
           try {
             const content = await getXml();
             const r = await api.post(`/processes/${processId}/versions`, {
@@ -519,7 +636,12 @@ function ModelerHost({ xml, onReady, onSelect, onParsed }: {
   useEffect(() => {
     if (!ref.current) return;
     import('bpmn-js/lib/Modeler').then((Mod) => {
-      const m = new Mod.default({ container: ref.current as HTMLElement, keyboard: { bindTo: document } });
+      const m = new Mod.default({
+        container: ref.current as HTMLElement,
+        keyboard: { bindTo: document },
+        // پالت کامل BPMN — همه رویدادها/وظایف/دروازه‌ها/داده‌ها (فاز ۸)
+        additionalModules: [BpmsCompletePaletteModule],
+      });
       mRef.current = m;
       onReady(m);
       // شنونده انتخاب روی همان نمونه زنده — بدون وابستگی به ترتیب mount والد

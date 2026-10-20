@@ -38,7 +38,55 @@ export interface FormField {
 export interface FormSchema {
   title?: string;
   fields: FormField[];
+  theme?: FormTheme;
 }
+
+// تم و ظاهر فرم — در فرم‌ساز و نمایش‌دهنده اعمال می‌شود
+export interface FormTheme {
+  primary?: string;      // رنگ اصلی دکمه‌ها و کنترل‌ها
+  headerBg?: string;     // پس‌زمینه سرصفحه فرم
+  headerColor?: string;  // رنگ متن سرصفحه
+  background?: string;   // پس‌زمینه بدنه فرم
+  fieldBg?: string;      // پس‌زمینه فیلدها
+  labelColor?: string;   // رنگ برچسب‌ها
+  radius?: number;       // گردی گوشه‌ها
+  font?: string;         // فونت (پیش‌فرض Vazirmatn)
+  density?: 'comfortable' | 'compact';
+}
+
+// پیش‌تنم‌های آماده تم — در فرم‌ساز قابل انتخاب
+export const THEME_PRESETS: { key: string; name: string; theme: FormTheme }[] = [
+  {
+    key: 'teal', name: 'فیروزه‌ای سازمانی (پیش‌فرض)',
+    theme: { primary: '#0e7490', headerBg: 'linear-gradient(135deg,#0e7490,#155e75)', headerColor: '#ffffff', background: '#f8fafc', fieldBg: '#ffffff', labelColor: '#0f172a', radius: 8, density: 'comfortable' },
+  },
+  {
+    key: 'indigo', name: 'نیلی مدرن',
+    theme: { primary: '#4f46e5', headerBg: 'linear-gradient(135deg,#4f46e5,#7c3aed)', headerColor: '#ffffff', background: '#eef2ff', fieldBg: '#ffffff', labelColor: '#1e1b4b', radius: 12, density: 'comfortable' },
+  },
+  {
+    key: 'emerald', name: 'سبز طبیعت',
+    theme: { primary: '#059669', headerBg: 'linear-gradient(135deg,#059669,#047857)', headerColor: '#ffffff', background: '#ecfdf5', fieldBg: '#ffffff', labelColor: '#064e3b', radius: 10, density: 'comfortable' },
+  },
+  {
+    key: 'royal', name: 'آبی سلطنتی',
+    theme: { primary: '#1d4ed8', headerBg: 'linear-gradient(135deg,#1d4ed8,#1e3a8a)', headerColor: '#ffffff', background: '#eff6ff', fieldBg: '#ffffff', labelColor: '#172554', radius: 6, density: 'comfortable' },
+  },
+  {
+    key: 'rose', name: 'سرخابی گرم',
+    theme: { primary: '#e11d48', headerBg: 'linear-gradient(135deg,#e11d48,#be123c)', headerColor: '#ffffff', background: '#fff1f2', fieldBg: '#ffffff', labelColor: '#4c0519', radius: 14, density: 'comfortable' },
+  },
+  {
+    key: 'dark', name: 'تیره اداری',
+    theme: { primary: '#f59e0b', headerBg: 'linear-gradient(135deg,#1e293b,#0f172a)', headerColor: '#fbbf24', background: '#f1f5f9', fieldBg: '#ffffff', labelColor: '#0f172a', radius: 8, density: 'compact' },
+  },
+  {
+    key: 'minimal', name: 'مینیمال روشن',
+    theme: { primary: '#334155', headerBg: '#f1f5f9', headerColor: '#0f172a', background: '#ffffff', fieldBg: '#ffffff', labelColor: '#334155', radius: 4, density: 'compact' },
+  },
+];
+
+export const DEFAULT_THEME: FormTheme = THEME_PRESETS[0].theme;
 
 export interface FieldError {
   key: string;

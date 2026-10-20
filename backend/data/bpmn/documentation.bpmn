@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  id="Definitions_Doc" targetNamespace="http://bpms.local/docs">
+  <bpmn:process id="Process_Documentation" name="مستندسازی اسناد سازمانی" isExecutable="true">
+    <bpmn:startEvent id="Start_Doc" name="شروع مستندسازی">
+      <bpmn:outgoing>F_Doc_Start</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:exclusiveGateway id="GW_Entry" name="ادغام بازگشت‌ها">
+      <bpmn:incoming>F_Doc_Start</bpmn:incoming>
+      <bpmn:incoming>Flow_DocRevise</bpmn:incoming>
+      <bpmn:incoming>Flow_FinalRevise</bpmn:incoming>
+      <bpmn:outgoing>F_Entry_Register</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:userTask id="Task_RegisterDoc" name="ثبت و ویرایش سند">
+      <bpmn:incoming>F_Entry_Register</bpmn:incoming>
+      <bpmn:outgoing>F_Register_Review</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:userTask id="Task_ExpertReview" name="بازبینی کارشناس">
+      <bpmn:incoming>F_Register_Review</bpmn:incoming>
+      <bpmn:outgoing>F_Review_GW</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway id="GW_Review" name="نتیجه بازبینی" default="Flow_DocRevise">
+      <bpmn:incoming>F_Review_GW</bpmn:incoming>
+      <bpmn:outgoing>Flow_DocRevise</bpmn:outgoing>
+      <bpmn:outgoing>Flow_DocReject</bpmn:outgoing>
+      <bpmn:outgoing>Flow_DocApprove</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:endEvent id="End_DocRejected" name="رد شده">
+      <bpmn:incoming>Flow_DocReject</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:userTask id="Task_FinalApproval" name="تأیید نهایی مدیر">
+      <bpmn:incoming>Flow_DocApprove</bpmn:incoming>
+      <bpmn:outgoing>F_Final_GW</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway id="GW_Final" name="تصمیم نهایی" default="Flow_FinalRevise">
+      <bpmn:incoming>F_Final_GW</bpmn:incoming>
+      <bpmn:outgoing>Flow_FinalRevise</bpmn:outgoing>
+      <bpmn:outgoing>Flow_FinalApprove</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="Task_ArchiveDoc" name="بایگانی سند">
+      <bpmn:incoming>Flow_FinalApprove</bpmn:incoming>
+      <bpmn:outgoing>F_Archive_End</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="End_DocArchived" name="سند بایگانی شد">
+      <bpmn:incoming>F_Archive_End</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="F_Doc_Start" sourceRef="Start_Doc" targetRef="GW_Entry"/>
+    <bpmn:sequenceFlow id="F_Entry_Register" sourceRef="GW_Entry" targetRef="Task_RegisterDoc"/>
+    <bpmn:sequenceFlow id="F_Register_Review" sourceRef="Task_RegisterDoc" targetRef="Task_ExpertReview"/>
+    <bpmn:sequenceFlow id="F_Review_GW" sourceRef="Task_ExpertReview" targetRef="GW_Review"/>
+    <bpmn:sequenceFlow id="Flow_DocRevise" name="اصلاح سند" sourceRef="GW_Review" targetRef="GW_Entry">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">action == 'revision'</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_DocReject" name="رد" sourceRef="GW_Review" targetRef="End_DocRejected">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">action == 'reject'</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_DocApprove" name="تأیید" sourceRef="GW_Review" targetRef="Task_FinalApproval">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">action == 'approve'</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="F_Final_GW" sourceRef="Task_FinalApproval" targetRef="GW_Final"/>
+    <bpmn:sequenceFlow id="Flow_FinalRevise" name="بازگشت برای اصلاح" sourceRef="GW_Final" targetRef="GW_Entry">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">action == 'revision'</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_FinalApprove" name="تأیید نهایی" sourceRef="GW_Final" targetRef="Task_ArchiveDoc">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">action == 'approve'</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="F_Archive_End" sourceRef="Task_ArchiveDoc" targetRef="End_DocArchived"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_Definitions_Doc">
+    <bpmndi:BPMNPlane id="BPMNPlane_Definitions_Doc" bpmnElement="Process_Documentation">
+      <bpmndi:BPMNShape id="Start_Doc_di" bpmnElement="Start_Doc">
+        <dc:Bounds x="100" y="232" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="GW_Entry_di" bpmnElement="GW_Entry" isMarkerVisible="true">
+        <dc:Bounds x="190" y="225" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_RegisterDoc_di" bpmnElement="Task_RegisterDoc">
+        <dc:Bounds x="280" y="210" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_ExpertReview_di" bpmnElement="Task_ExpertReview">
+        <dc:Bounds x="450" y="210" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="GW_Review_di" bpmnElement="GW_Review" isMarkerVisible="true">
+        <dc:Bounds x="620" y="225" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_DocRejected_di" bpmnElement="End_DocRejected">
+        <dc:Bounds x="626" y="350" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_FinalApproval_di" bpmnElement="Task_FinalApproval">
+        <dc:Bounds x="740" y="210" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="GW_Final_di" bpmnElement="GW_Final" isMarkerVisible="true">
+        <dc:Bounds x="900" y="225" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_ArchiveDoc_di" bpmnElement="Task_ArchiveDoc">
+        <dc:Bounds x="1000" y="210" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_DocArchived_di" bpmnElement="End_DocArchived">
+        <dc:Bounds x="1180" y="232" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="F_Doc_Start_di" bpmnElement="F_Doc_Start">
+        <di:waypoint x="136" y="250"/>
+        <di:waypoint x="190" y="250"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_Entry_Register_di" bpmnElement="F_Entry_Register">
+        <di:waypoint x="240" y="250"/>
+        <di:waypoint x="280" y="250"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_Register_Review_di" bpmnElement="F_Register_Review">
+        <di:waypoint x="400" y="250"/>
+        <di:waypoint x="450" y="250"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_Review_GW_di" bpmnElement="F_Review_GW">
+        <di:waypoint x="570" y="250"/>
+        <di:waypoint x="620" y="250"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_DocRevise_di" bpmnElement="Flow_DocRevise">
+        <di:waypoint x="670" y="250"/>
+        <di:waypoint x="190" y="250"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="180" y="226" width="72" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_DocReject_di" bpmnElement="Flow_DocReject">
+        <di:waypoint x="670" y="250"/>
+        <di:waypoint x="648" y="250"/>
+        <di:waypoint x="648" y="368"/>
+        <di:waypoint x="626" y="368"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="638" y="344" width="30" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_DocApprove_di" bpmnElement="Flow_DocApprove">
+        <di:waypoint x="670" y="250"/>
+        <di:waypoint x="740" y="250"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="730" y="226" width="40" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_Final_GW_di" bpmnElement="F_Final_GW">
+        <di:waypoint x="860" y="250"/>
+        <di:waypoint x="900" y="250"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_FinalRevise_di" bpmnElement="Flow_FinalRevise">
+        <di:waypoint x="950" y="250"/>
+        <di:waypoint x="190" y="250"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="180" y="226" width="136" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_FinalApprove_di" bpmnElement="Flow_FinalApprove">
+        <di:waypoint x="950" y="250"/>
+        <di:waypoint x="1000" y="250"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="990" y="226" width="88" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_Archive_End_di" bpmnElement="F_Archive_End">
+        <di:waypoint x="1120" y="250"/>
+        <di:waypoint x="1180" y="250"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

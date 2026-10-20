@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  id="Definitions_Corr" targetNamespace="http://bpms.local/attendance">
+  <bpmn:process id="Process_AttendanceCorrection" name="اصلاح تردد" isExecutable="true">
+    <bpmn:startEvent id="Start_Corr" name="ثبت درخواست اصلاح تردد">
+      <bpmn:outgoing>F_Corr_Start</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:userTask id="Task_SubmitCorr" name="ثبت مغایرت تردد">
+      <bpmn:incoming>F_Corr_Start</bpmn:incoming>
+      <bpmn:outgoing>F_Corr_Check</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:userTask id="Task_SupervisorCheck" name="بررسی سرپرست">
+      <bpmn:incoming>F_Corr_Check</bpmn:incoming>
+      <bpmn:outgoing>F_Corr_GW</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway id="GW_Corr" name="تصمیم سرپرست" default="Flow_Corr_Reject">
+      <bpmn:incoming>F_Corr_GW</bpmn:incoming>
+      <bpmn:outgoing>Flow_Corr_Reject</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Corr_Approve</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:endEvent id="End_CorrRejected" name="رد شده">
+      <bpmn:incoming>Flow_Corr_Reject</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:endEvent id="End_CorrApproved" name="اصلاح تأیید شد">
+      <bpmn:incoming>Flow_Corr_Approve</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="F_Corr_Start" sourceRef="Start_Corr" targetRef="Task_SubmitCorr"/>
+    <bpmn:sequenceFlow id="F_Corr_Check" sourceRef="Task_SubmitCorr" targetRef="Task_SupervisorCheck"/>
+    <bpmn:sequenceFlow id="F_Corr_GW" sourceRef="Task_SupervisorCheck" targetRef="GW_Corr"/>
+    <bpmn:sequenceFlow id="Flow_Corr_Reject" name="رد" sourceRef="GW_Corr" targetRef="End_CorrRejected"/>
+    <bpmn:sequenceFlow id="Flow_Corr_Approve" name="تأیید" sourceRef="GW_Corr" targetRef="End_CorrApproved">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">action == 'approve'</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_Definitions_Corr">
+    <bpmndi:BPMNPlane id="BPMNPlane_Definitions_Corr" bpmnElement="Process_AttendanceCorrection">
+      <bpmndi:BPMNShape id="Start_Corr_di" bpmnElement="Start_Corr">
+        <dc:Bounds x="140" y="232" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_SubmitCorr_di" bpmnElement="Task_SubmitCorr">
+        <dc:Bounds x="220" y="210" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_SupervisorCheck_di" bpmnElement="Task_SupervisorCheck">
+        <dc:Bounds x="390" y="210" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="GW_Corr_di" bpmnElement="GW_Corr" isMarkerVisible="true">
+        <dc:Bounds x="560" y="225" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_CorrRejected_di" bpmnElement="End_CorrRejected">
+        <dc:Bounds x="566" y="350" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_CorrApproved_di" bpmnElement="End_CorrApproved">
+        <dc:Bounds x="690" y="232" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="F_Corr_Start_di" bpmnElement="F_Corr_Start">
+        <di:waypoint x="176" y="250"/>
+        <di:waypoint x="220" y="250"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_Corr_Check_di" bpmnElement="F_Corr_Check">
+        <di:waypoint x="340" y="250"/>
+        <di:waypoint x="390" y="250"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_Corr_GW_di" bpmnElement="F_Corr_GW">
+        <di:waypoint x="510" y="250"/>
+        <di:waypoint x="560" y="250"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Corr_Reject_di" bpmnElement="Flow_Corr_Reject">
+        <di:waypoint x="610" y="250"/>
+        <di:waypoint x="588" y="250"/>
+        <di:waypoint x="588" y="368"/>
+        <di:waypoint x="566" y="368"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="578" y="344" width="30" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Corr_Approve_di" bpmnElement="Flow_Corr_Approve">
+        <di:waypoint x="610" y="250"/>
+        <di:waypoint x="690" y="250"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="680" y="226" width="40" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

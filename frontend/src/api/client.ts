@@ -25,15 +25,35 @@ api.interceptors.response.use(
 );
 
 export function extractError(err: unknown): string {
-  const e = err as { response?: { data?: { error?: { message?: string; errors?: { message?: string }[] } } } };
+  // ۱) خطای قالب استاندارد سرور: {"error": {"message": ...}}
+  const e = err as {
+    response?: { data?: { error?: { message?: string; errors?: { message?: string }[] }; detail?: unknown } };
+    message?: string;
+  };
   const data = e?.response?.data;
-  if (!data?.error) return 'خطای ناشناخته رخ داد';
-  const base = data.error.message || '';
-  const fieldErrors = data.error.errors;
-  if (Array.isArray(fieldErrors) && fieldErrors.length) {
-    return base + ' — ' + fieldErrors.map((x) => x.message).join('؛ ');
+  if (data?.error) {
+    const base = data.error.message || '';
+    const fieldErrors = data.error.errors;
+    if (Array.isArray(fieldErrors) && fieldErrors.length) {
+      return base + ' — ' + fieldErrors.map((x) => x.message).join('؛ ');
+    }
+    if (base) return base;
   }
-  return base || 'خطا در پردازش درخواست';
+  // ۲) خطای FastAPI بدون قالب یکسان (۵۰۰ و ...) — detail را نشان بده
+  const detail = (data as { detail?: unknown } | undefined)?.detail;
+  if (typeof detail === 'string' && detail) return detail;
+  if (detail && typeof detail === 'object') {
+    try { return JSON.stringify(detail).slice(0, 300); } catch { /* ignore */ }
+  }
+  const raw = data as unknown;
+  if (typeof raw === 'string' && raw.length > 0 && raw.length < 300) return raw;
+  // ۳) خطای سمت مرورگر (شبکه/کد) — پیام واقعی بهتر از «ناشناخته» است
+  if (e?.message) {
+    if (e.message === 'Network Error') return 'ارتباط با سرور برقرار نشد — اتصال اینترنت/سرور را بررسی کنید';
+    if (e.message.includes('timeout')) return 'زمان پاسخ سرور به پایان رسید — دوباره تلاش کنید';
+    return e.message;
+  }
+  return 'خطای ناشناخته رخ داد';
 }
 
 // ---------- API رابط‌های تایپ‌دار ----------
